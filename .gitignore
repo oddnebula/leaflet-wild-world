@@ -1,0 +1,9 @@
+# Never commit game files: Leaflet reads artwork and sound from the player's own ROM at runtime.
+*.nds
+*.sav
+*.dsv
+*.duc
+*.sdat
+# Build output
+dist/
+.DS_Store
