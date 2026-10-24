@@ -249,7 +249,7 @@
           h('button', { class: 'btn leaf', style: { height: '36px', padding: '0 18px', fontSize: '14px' }, onclick: openFile }, '📂  Open Save File')),
         h('div', { class: 'rom-card' + (ROM.ready ? ' on' : '') },
           h('b', null, ROM.ready ? '🎨 Game art is on' : '🎮 Want the real game look?'),
-          h('span', null, ROM.ready ? 'Item icons, encyclopedia pictures and villager models come from your ROM.' : 'Open your own Wild World ROM (.nds) once to use the game’s actual item icons, encyclopedia pictures and villager models. The art stays on this computer.'),
+          h('span', null, ROM.ready ? 'Item icons, encyclopedia pictures, 3D models and music come from your ROM.' : 'Optional: open a backup (.nds) you dumped yourself from your own Wild World cartridge to use the game’s item icons, 3D models and music. Leaflet includes no game files, and what it reads stays on this computer. Please don’t download ROMs.'),
           ROM.stale ? h('span', { class: 'rom-stale' }, 'This version reads more from the ROM (such as held tools). Open it again to add them.') : null,
           ROM.stale ? h('button', { class: 'btn small', onclick: pickRom }, 'Open ROM again…') : null,
           h('button', { class: 'btn small', onclick: ROM.ready ? () => ROM.forget() : pickRom }, ROM.ready ? 'Forget game art' : 'Open ROM…')),

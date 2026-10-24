@@ -491,3 +491,9 @@ canvas.model3d:active { cursor: grabbing; }
 .diary-day { display: flex; flex-direction: column; gap: 6px; }
 .diary-line { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; line-height: 1.45; }
 .diary-line .em { font-size: 18px; text-align: center; }
+
+/* ---------- 3D room ---------- */
+.room3d { display: flex; flex-direction: column; align-items: center; }
+.room3d canvas { border-radius: 14px; background: linear-gradient(180deg, #fff6dd, #f3e2b8); cursor: grab; touch-action: none; max-width: 100%; height: auto !important; }
+.room3d-empty { display: flex; gap: 10px; align-items: center; padding: 30px 16px; justify-content: center; color: var(--text-2); font-weight: 650; }
+.room3d-empty .em { font-size: 26px; }

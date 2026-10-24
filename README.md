@@ -5,6 +5,27 @@ A save editor for Animal Crossing: Wild World (Nintendo DS) that works on macOS 
 Works with USA and European saves (256 KB `.sav` files from flashcarts, DeSmuME, melonDS and save dumpers).
 Japanese and Korean saves use a different layout and are not supported.
 
+> [!IMPORTANT]
+> **Leaflet includes no ROMs and no Nintendo content, and never will.** It edits save files and works without a ROM.
+> If you choose to open a ROM for the game's art and sound, it must be **a backup you dumped yourself from an *Animal
+> Crossing: Wild World* cartridge you own**. Don't download ROMs. Requests for ROMs will be closed without a reply.
+> Not affiliated with or endorsed by Nintendo. See [LEGAL.md](LEGAL.md).
+
+![Town overview](docs/screenshots/overview.png)
+
+| | |
+|---|---|
+| ![Today in Town](docs/screenshots/today.png) **Today in Town**: the game's clock, weather, turnips and what's out now | ![Calendar](docs/screenshots/calendar.png) **Calendar**: festivals, birthdays and visitors, with .ics export |
+| ![Catalog](docs/screenshots/catalog.png) **Catalog**: every item, with set tracking | ![Museum](docs/screenshots/museum.png) **Museum**: donors, months, hours and rarity for every exhibit |
+| ![House](docs/screenshots/house.png) **My House**: drag furniture between rooms, or view a room in 3D with your ROM | ![Town map](docs/screenshots/map.png) **Town Map**: all 4,096 spots, editable |
+| ![Completion](docs/screenshots/progress.png) **Completion**: museum, catalog, songs and golden tools | ![Neighbor](docs/screenshots/villager.png) **Neighbors**: species, personality, hobbies, home and memories |
+| ![Town records](docs/screenshots/records.png) **Town Records**: turnips, weather, the game clock and visitors | ![Save Doctor](docs/screenshots/doctor.png) **Save Doctor**: finds and fixes impossible states |
+| ![Save Explorer](docs/screenshots/explorer.png) **Save Explorer**: every byte, typed and editable | ![Welcome](docs/screenshots/welcome.png) **Welcome**: open a save, with an optional ROM backup |
+
+<sub>Screenshots show Leaflet **without a ROM**: every icon and drawing is Leaflet's own (emoji, CSS and SVG), and the
+town and resident names come from a renamed demo copy of a save. With your own ROM backup, the game's icons, 3D models
+and music appear instead, on your computer only.</sub>
+
 ## Running it
 
 Download the latest build from [Releases](https://github.com/oddnebula/leaflet-wild-world/releases): `Leaflet-macOS.zip` or `Leaflet-Windows.zip`. Or clone the repository and open `index.html`.
@@ -19,13 +40,16 @@ Shortcuts: ⌘/Ctrl-O open · ⌘/Ctrl-S save a copy · ⌘/Ctrl-F search every 
 
 ## Game art and sound from your ROM
 
-Leaflet ships with **no Nintendo artwork, models, music or sound**. Open your own Wild World ROM (`.nds`) once from the Welcome screen, or drop it on the window, and Leaflet reads what it needs straight from it:
+Leaflet ships with **no Nintendo artwork, models, music or sound**. If you have dumped your own *Wild World* cartridge, open that backup (`.nds`) once from the Welcome screen, or drop it on the window, and Leaflet reads what it needs straight from it. Use only a backup of a cartridge you legally own ([LEGAL.md](LEGAL.md)).
+
+What it adds:
 
 - the real pocket icons for every item, and the encyclopedia pictures of every fish and bug
 - the game's pocket screen, drawn exactly as on the DS, with your items placed in its slots
 - **3D villagers**, rendered from their actual models and wearing the shirt from your save, and their **real room layouts** (the game's 40 furniture arrangements, with the pieces they have on display)
 - **your resident in 3D**: body, hairstyle, hair color, face, tan, shirt (including custom designs), hat, glasses and the tool or umbrella in their hand (custom umbrellas show your design), assembled the way the game does it
 - every letter drawn on its **real stationery** (all 64 papers)
+- **your house in 3D**: every room with the game's own furniture models, wallpaper and flooring, placed and turned exactly as in your save, and you can drag to look around
 - **K.K. songs** played with the game's own instruments, in the stereo (aircheck) or live-at-the-Roost version
 - the game's own **sound effects** for every click, tab, popup, confirm and error, and Animalese from the game's voice samples
 
@@ -62,7 +86,7 @@ Still, back up your save before playing an edited file.
 | Villager memories | Each memory slot: friendship, nickname, compliment, greeting, last chat, last gift, impression, the town tune they hum, talk streak and 9 named flags (letters, gifts, birthday and New Year letters, parties, flea market) |
 | Friendships | How every pair of neighbors gets along, as an editable chart, and the town tune request. Who's outside now and the going-out order, last move-in and move-out, the last neighbor to leave, the nickname cooldown, the four house exterior styles, and every villager who has ever lived here (the game won't pick them again; clear it to let anyone move in) |
 | More for neighbors | Their pattern, their letter, clearing a lot, the villager moving in from another town (with their hobby and plans) |
-| House | In-game style rooms sized to your house level: drag to move, right-click to rotate, both layers shown at once. Wallpaper, flooring, music per room, house size, pending upgrade, current / requested / after-upgrade roof color, lights per room, loan (with the game's own amount for each size), **furniture switches** (lamps, stereos, jack-in-the-boxes) as a clickable grid per layer, the gyroids' beat settings, and custom-design wallpaper/flooring flags |
+| House | A **3D view** of each room with the game's own furniture models, wallpaper and flooring (with your ROM), and in-game style rooms sized to your house level: drag to move, right-click to rotate, both layers shown at once. Wallpaper, flooring, music per room, house size, pending upgrade, current / requested / after-upgrade roof color, lights per room, loan (with the game's own amount for each size), **furniture switches** (lamps, stereos, jack-in-the-boxes) as a clickable grid per layer, the gyroids' beat settings, and custom-design wallpaper/flooring flags |
 | K.K. songs | Unlock every song or toggle each one individually, and listen to any of them (stereo or live) with a ROM |
 | Museum | All 184 exhibits (52 fossils, 56 fish, 56 bugs, 20 paintings), with the donor of each (a resident, or “former resident”). Fill a wing or the whole museum |
 | Town records | Turnip prices as a chart with every AM/PM price, pattern, big-spike price and dates. **Weather** for today and tomorrow as hour-by-hour strips (32 patterns from the game). The **game clock** (the save's offset from the DS clock: time travel by days, hours and minutes, or back to DS time). The perfect-town streak (golden watering can), Gulliver's UFO parts, the sick neighbor and how long they've been ill, town hall donations, Katie (or Kaitlin) and her home town, who visits the Roost today, Crazy Redd's stock and last sale, and Tortimer's contest record. A **calendar** with Crazy Redd's day, the week's five visitor slots (day, visitor by name: Saharah, Katrina, Gracie, Wendell, Pascal, Dr. Shrunk, Crazy Redd, Gulliver's UFO, Pete; state, who was there) with a re-roll, the town's event records, each resident's last-played date and the Happy Room Academy date, plus the three **snowmen** (size, rank, age). Town event records show their start and end as month, day and hour, and the event shared while playing online is editable |
@@ -112,6 +136,7 @@ The whole main block is now laid out field by field from the decompilation's `Sa
 - Models: villagers are `npc/model/{species & 0xF8}/{species}`; residents combine `PBody`, `PHead` (hair, hat hair, hats, full headwear), `PFcTx` faces, `PPal` skin (tan + face × 8) and hair (0x80 + color × 8 + tan) palettes and `PGls` glasses. Held items 0x1369–0x13A7 index `sHeldItemModelIds` for `PItm/Mdl{x >> 5}/{x}` and hang from the body's `Rhand` bone; custom umbrellas use the `myD` texture.
 - Stationery: `menu/paper/{scr,chr,plt}/NNN` for paper NNN; the map numbers tiles from 16 and palettes from slot 12.
 - Music: `SndMgr_PlayBgm(k)` starts SDAT sequence k. The town's hourly themes are `sHourlyBgmIds[hour]` = sequence 0x16 + hour. K.K. song item 0x1323 + i is sequence 176 + i on a stereo and 99 + i live (`FtrStereo::startSong`, the Roost show).
+- Furniture models: `/ftr/{n >> 8}/{(n & 0xFF) >> 4}/{n:04x}.arc` (an LZ-compressed NARC holding the NSBMD, sometimes with BMA0/BTA0 animations) with textures in the matching `.nsbtx`; wallpaper `wall/wall_{k}.nsbtx`, flooring `carpet/floor_{k}.nsbtx`. A room tile is 2 units. Footprints (ftr_info byte 5) are 1×1, 2×1 (reaching along the piece's own +x after turning by direction × 90°) or 2×2 (drawn at the middle of the four tiles); the other tiles hold 0xF031. Items on the top layer sit at the height in ftr_info/dma byte 3 ÷ 16.
 - Clock offset at 0x15FB4: s32 minutes and s16 seconds added to the DS clock (`Clock_ReadAdjusted`).
 - Item class orders at 0x15FBC: one byte per shop list (furniture, stationery, shirts, carpets, wallpaper, accessories, hats, umbrellas, full headwear) picking one of six 60/30/10 weightings of classes A, B and C.
 - Weekly visitor schedule at 0x15E18 (0x3C bytes, `EventWeekSlots`): four dates, Crazy Redd's weekday, today's event, and five slots of date, event, state, happened, residents present.
@@ -131,7 +156,7 @@ The whole main block is now laid out field by field from the decompilation's `Sa
 ## Credits
 
 Built on the work of ACSE by Cuyler36 (MIT; item, villager and acre lists, Wild World and New Leaf palettes), DrewPag's Wild World spawn-table research (bug and fish availability), jsQR by Cosmo Wolfe (Apache-2.0), WildEdit, LeafEdit and ACWW-Research by Universal-Team and SuperSaiyajinStackZ, WildStorage by NovaSquirrel (MIT), and the acww-decomp project.
-Full credits and licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Leaflet's own code is MIT-licensed ([LICENSE](LICENSE)).
+Full credits and licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Legal notice: [LEGAL.md](LEGAL.md). Leaflet's own code is MIT-licensed ([LICENSE](LICENSE)).
 Not affiliated with Nintendo. Animal Crossing is a trademark of Nintendo.
 
 ### Sharing this project

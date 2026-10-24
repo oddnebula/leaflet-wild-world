@@ -180,7 +180,7 @@
 
   function audio() {
     if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination); }
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended' && !(window.OfflineAudioContext && ctx instanceof OfflineAudioContext)) ctx.resume();
   }
   function play(id, opts = {}) {
     if (!info) return false;

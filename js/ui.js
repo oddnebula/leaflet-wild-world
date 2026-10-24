@@ -66,6 +66,8 @@
       const base = ITEM.get(id & 0xFFFC);
       if (base) it = { ...base, id, rotation: id & 3 };
     }
+    // 0xF031 marks the other tiles of a 2-tile or 4-tile piece of furniture (FtrSync_PlaceFurniture).
+    if (!it && id === 0xF031) it = { id, name: 'Occupied Space (part of a larger piece)', cat: 'Occupied Space' };
     if (!it) it = { id, name: id === 0xFFF1 ? 'Empty' : 'Unknown item', cat: id === 0xFFF1 ? 'Empty' : '?' };
     return it;
   }

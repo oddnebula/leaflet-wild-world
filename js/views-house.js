@@ -37,7 +37,7 @@
   const ROOF_RGB = ['#e05a4f', '#f0954a', '#f2cf4a', '#a9d86e', '#4fb366', '#7cc6ea', '#4a7fd6', '#9a6fd1', '#f29ac0', '#3a3a44', '#f4f2ec', '#9c6b45'];
   window.WW_HOUSE = { getF, setF, SIZES };
 
-  let room = 0, showOutside = false;
+  let room = 0, showOutside = false, show3d = false;
 
   function editSpot(s, r, x, y, refresh) {
     const k = y * 16 + x, o1 = r + k * 2, o2 = r + 0x200 + k * 2;
@@ -53,6 +53,17 @@
         h('div', null, h('div', { class: 'muted', style: { fontWeight: 700, fontSize: '12px', marginBottom: '6px' } }, 'ON TOP (TABLES, DRESSERS)'),
           slot(() => s.u16(o2), v => s.set16(o2, v), { title: 'Place on top' }),
           h('button', { class: 'btn small', style: { marginTop: '6px' }, onclick: () => rot(o2) }, '↻ Rotate')))));
+  }
+
+  // The room in 3D with the game's own furniture, wallpaper and flooring from the player's ROM (js/room3d.js).
+  function view3d(s, r, area) {
+    const need = msg => h('div', { class: 'room3d-empty' }, h('span', { class: 'em' }, '🪑'), msg);
+    if (!window.ROM || !ROM.ready) return need('Open your Wild World ROM on the Welcome screen to see this room in 3D with the game’s own furniture.');
+    const sc = window.Room3D.scene({ area, wall: s.u16(r + 0x448), floor: s.u16(r + 0x44A), items: (x, y, L) => s.u16(r + L * 0x200 + (y * 16 + x) * 2) });
+    if (!sc) return need('Your saved game art is from an older Leaflet. Open the ROM again on the Welcome screen to add the furniture models.');
+    const cv = window.Model3D.viewer(sc.groups, { size: Math.min(620, Math.max(320, (document.getElementById('content')?.clientWidth || 700) - 80)), yaw: 0, spin: false, pitch: 0.75, zoom: 1.55 });
+    return h('div', { class: 'room3d' }, cv || need('3D needs WebGL, which this browser has turned off.'),
+      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Drag to look around. Switch 3D off to move furniture.', sc.missing.length ? ` ${sc.missing.length} piece${sc.missing.length === 1 ? ' has' : 's have'} no model.` : ''));
   }
 
   VIEWS.push({
@@ -111,8 +122,10 @@
         h('div', { class: 'card pad' },
           h('div', { class: 'btn-row', style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
             h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Click a spot to edit it · drag to move · right-click to spin or clear'),
-            h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, 'Show outside the walls', switchInput(() => showOutside, v => { showOutside = v; refresh(); }))),
-          view,
+            h('span', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
+              h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, '3D view', switchInput(() => show3d, v => { show3d = v; refresh(); })),
+              show3d ? null : h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, 'Show outside the walls', switchInput(() => showOutside, v => { showOutside = v; refresh(); })))),
+          show3d ? view3d(s, r, area) : view,
           !built ? h('div', { class: 'callout', style: { marginTop: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'This room isn’t built yet'), 'Furniture placed here only shows up after the matching upgrade. Changing the house size by hand without the upgrade can leave furniture stuck inside walls.')) : null,
           showOutside ? h('div', { class: 'callout', style: { marginTop: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'Outside the walls'), 'Spots outside the room are normally empty. Furniture placed there may be unreachable or invisible.')) : null),
         card(

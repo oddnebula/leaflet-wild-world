@@ -16,6 +16,8 @@ spawn odds, and numeric tables documented by the decompilation (hourly weather p
 villager birthdays, the star-map line cells, pocket-icon palette slots and Happy Room Academy class points). All
 artwork in the interface (icons, acre thumbnails, backgrounds) is original SVG, CSS and drawing code.
 
+Players must use a ROM backup they dumped from a cartridge they own. See [LEGAL.md](LEGAL.md).
+
 ## Code
 
 | Project | Used for | License |

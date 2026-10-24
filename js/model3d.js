@@ -263,7 +263,7 @@
   const VS = 'attribute vec3 p;attribute vec2 uv;attribute vec3 c;uniform mat4 mvp;varying vec2 vuv;varying vec3 vc;void main(){gl_Position=mvp*vec4(p,1.0);vuv=uv;vc=c;}';
   const FS = 'precision mediump float;varying vec2 vuv;varying vec3 vc;uniform sampler2D tex;uniform float has;void main(){vec4 t=has>0.5?texture2D(tex,vuv):vec4(1.0);if(t.a<0.5)discard;gl_FragColor=vec4(t.rgb*vc,1.0);}';
 
-  function viewer(groups, { size = 220, yaw = 0.35, spin = true } = {}) {
+  function viewer(groups, { size = 220, yaw = 0.35, spin = true, pitch: pitch0 = 0.12, zoom = 1.7 } = {}) {
     const canvas = document.createElement('canvas');
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = size * dpr; canvas.height = size * dpr; canvas.style.width = canvas.style.height = size + 'px';
@@ -293,10 +293,10 @@
     const ctr = [0, 1, 2].map(k => (min[k] + max[k]) / 2), ext = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
     const loc = { p: gl.getAttribLocation(prog, 'p'), uv: gl.getAttribLocation(prog, 'uv'), c: gl.getAttribLocation(prog, 'c'), mvp: gl.getUniformLocation(prog, 'mvp'), has: gl.getUniformLocation(prog, 'has') };
     gl.enable(gl.DEPTH_TEST);
-    let angle = yaw, pitch = 0.12, dragging = null, raf = 0;
+    let angle = yaw, pitch = pitch0, dragging = null, raf = 0;
     function draw() {
       gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      const s = 1.7 / ext, ca = Math.cos(angle), sa = Math.sin(angle), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const s = zoom / ext, ca = Math.cos(angle), sa = Math.sin(angle), cp = Math.cos(pitch), sp = Math.sin(pitch);
       // Column-major MVP: center, yaw, pitch, scale, and depth into clip range.
       const T = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -ctr[0], -ctr[1], -ctr[2], 1];
       const Ry = [ca, 0, -sa, 0, 0, 1, 0, 0, sa, 0, ca, 0, 0, 0, 0, 1];
@@ -316,7 +316,7 @@
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     function tick() { if (!canvas.isConnected) return; if (!dragging && spin && !reduce) angle += 0.006; draw(); raf = requestAnimationFrame(tick); }
     canvas.addEventListener('pointerdown', e => { dragging = [e.clientX, e.clientY, angle, pitch]; canvas.setPointerCapture(e.pointerId); });
-    canvas.addEventListener('pointermove', e => { if (!dragging) return; angle = dragging[2] + (e.clientX - dragging[0]) * 0.012; pitch = Math.max(-0.6, Math.min(0.8, dragging[3] + (e.clientY - dragging[1]) * 0.008)); if (reduce) draw(); });
+    canvas.addEventListener('pointermove', e => { if (!dragging) return; angle = dragging[2] + (e.clientX - dragging[0]) * 0.012; pitch = Math.max(-0.6, Math.min(1.2, dragging[3] + (e.clientY - dragging[1]) * 0.008)); if (reduce || !spin) draw(); });
     canvas.addEventListener('pointerup', () => { dragging = null; });
     draw();
     requestAnimationFrame(() => { if (canvas.isConnected) tick(); else setTimeout(() => canvas.isConnected && tick(), 300); });
@@ -324,5 +324,5 @@
     return canvas;
   }
 
-  window.Model3D = { villagerMesh, playerMesh, viewer, parseModel, runSBC, runDL, parseTex, decodeTex, patternTex };
+  window.Model3D = { villagerMesh, playerMesh, viewer, parseModel, runSBC, runDL, parseTex, decodeTex, patternTex, modelGroups, ownTex };
 })();

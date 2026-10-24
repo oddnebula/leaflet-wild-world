@@ -23,6 +23,7 @@ ditto --noextattr index.html "$OUT/Contents/Resources/web/index.html"
 ditto --noextattr css "$OUT/Contents/Resources/web/css"
 ditto --noextattr js "$OUT/Contents/Resources/web/js"
 ditto --noextattr LICENSE "$OUT/Contents/Resources/LICENSE"
+ditto --noextattr LEGAL.md "$OUT/Contents/Resources/LEGAL.md"
 ditto --noextattr THIRD_PARTY_NOTICES.md "$OUT/Contents/Resources/THIRD_PARTY_NOTICES.md"
 ditto --noextattr licenses "$OUT/Contents/Resources/licenses"
 

@@ -41,7 +41,7 @@ A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon
   save you've opened (backups make this free), and preview of a design on a shirt, umbrella, hat and flag in 3D.
 - **Town planner (L).** Drag trees, flowers and paths over the real map art from the ROM, with flower-breeding odds,
   perfect-town scoring per acre, and "apply to save" when happy.
-- ★ **Room designer in 3D (L).** Render the house rooms with the real furniture models (`ftr/` NSBMD) and walls, so
+- ✅ **Room designer in 3D (L).** Render the house rooms with the real furniture models (`ftr/` NSBMD) and walls, so
   the room editor looks exactly like the game; take screenshots.
 - **Constellation gallery (S).** Export a constellation as an image, share codes, and a library of famous shapes.
 - **Letter studio (S).** Write letters on the real stationery with the game's font (from `font/`), preview them

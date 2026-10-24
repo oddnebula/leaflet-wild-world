@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   const DB = 'leaflet-rom', STORE = 'files', KEY = 'ADME';
-  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//];
+  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//];
   let files = null;            // Map path -> Uint8Array (raw, possibly compressed)
   let stale = false;           // a cache from an older Leaflet that lacks files this version reads (the start card asks for the ROM again)
   const listeners = new Set();
