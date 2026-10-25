@@ -37,7 +37,7 @@ A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon
 - **K.K. jukebox (S).** All 70 songs with a playlist, shuffle and "which ones am I missing".
 
 ## Creativity
-- ★ **Pattern studio upgrades (M).** Layers, mirror drawing, a palette swapper, a library of every pattern in every
+- ✅ **Pattern studio upgrades (M).** Layers, mirror drawing, a palette swapper, a library of every pattern in every
   save you've opened (backups make this free), and preview of a design on a shirt, umbrella, hat and flag in 3D.
 - **Town planner (L).** Drag trees, flowers and paths over the real map art from the ROM, with flower-breeding odds,
   perfect-town scoring per acre, and "apply to save" when happy.

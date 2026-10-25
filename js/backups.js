@@ -27,7 +27,8 @@
   }
   const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   async function tx(mode, fn) { const d = await db(); const t = d.transaction(STORE, mode); const out = await fn(t.objectStore(STORE)); await new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); }); return out; }
-  const all = () => tx('readonly', st => req(st.getAll())).catch(() => []);
+  // If the browser's storage is blocked (another window mid-upgrade, private mode), carry on without backups.
+  const all = () => Promise.race([tx('readonly', st => req(st.getAll())).catch(() => []), new Promise(res => setTimeout(() => res([]), 4000))]);
 
   // FNV-1a over the main block and town hall letters: what changes when a town changes.
   function hash(bytes) { let x = 0x811C9DC5; for (let i = 0; i < bytes.length; i++) { x ^= bytes[i]; x = Math.imul(x, 0x01000193) >>> 0; } return x.toString(16); }

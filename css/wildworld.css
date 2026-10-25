@@ -497,3 +497,31 @@ canvas.model3d:active { cursor: grabbing; }
 .room3d canvas { border-radius: 14px; background: linear-gradient(180deg, #fff6dd, #f3e2b8); cursor: grab; touch-action: none; max-width: 100%; height: auto !important; }
 .room3d-empty { display: flex; gap: 10px; align-items: center; padding: 30px 16px; justify-content: center; color: var(--text-2); font-weight: 650; }
 .room3d-empty .em { font-size: 26px; }
+
+/* ---------- pattern studio ---------- */
+.ps { grid-template-columns: auto minmax(0, 1fr); }
+.ps-canvas { display: flex; flex-direction: column; gap: 10px; }
+.ps-under { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ps-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.ps-tool { width: 38px; height: 34px; border-radius: 10px; border: 2px solid var(--card-line); background: var(--field); cursor: pointer; font-size: 16px; font-weight: 900; color: var(--text); }
+.ps-tool.on { border-color: var(--leaf-deep); background: var(--leaf-soft); box-shadow: 0 2px 0 var(--leaf-deep); }
+.ps-status { font-size: 11.5px; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.ps-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ps-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ps-label { font-size: 12px; font-weight: 800; color: var(--text-2); margin-bottom: 6px; letter-spacing: .02em; }
+.ps-prev canvas { width: 96px; height: 96px; image-rendering: pixelated; border-radius: 10px; background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0/12px 12px; box-shadow: 0 6px 14px -8px rgba(0,0,0,.5); display: block; }
+.ps-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; font-weight: 650; margin-top: 6px; }
+.ps-layers { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; max-height: 220px; overflow: auto; }
+.ps-layer { display: grid; grid-template-columns: 30px 32px 1fr; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 10px; border: 2px solid transparent; background: var(--field); cursor: pointer; font-weight: 700; font-size: 12.5px; }
+.ps-layer.on { border-color: var(--leaf-deep); background: var(--leaf-soft); }
+.ps-layer.hidden canvas, .ps-layer.hidden span { opacity: .4; }
+.ps-layer canvas { width: 32px; height: 32px; image-rendering: pixelated; border-radius: 5px; background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0/8px 8px; }
+.ps-eye { border: 0; background: none; cursor: pointer; font-size: 15px; }
+.ps-swap { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+.swatch.mini { width: 20px; height: 20px; border-radius: 6px; }
+.pattern-tile.lib { border: 0; background: none; font: inherit; color: inherit; padding: 0; }
+.lib-detail { display: grid; grid-template-columns: auto 1fr; gap: 18px; margin-bottom: 12px; }
+.lib-big canvas { width: 256px; height: 256px; image-rendering: pixelated; border-radius: 12px; background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0/16px 16px; box-shadow: 0 10px 24px -14px rgba(0,0,0,.6); }
+.lib-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lib-seen { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 120px; overflow: auto; }
+@media (max-width: 640px) { .lib-detail { grid-template-columns: 1fr; } .lib-big canvas { width: 100%; height: auto; } }

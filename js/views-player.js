@@ -86,69 +86,9 @@
     drawPattern(cv, s, off);
     return h('div', { class: 'pattern-tile', onclick: onOpen }, cv, h('div', { class: 'nm' }, s.str(off + 0x216, 16) || 'Untitled'), h('div', { class: 's' }, label));
   }
+  // The drawing studio (js/patternstudio.js) plus the pattern's name, creator and concept.
   function patternEditor(s, off, opts = {}) {
-    let color = 1;
-    const big = h('canvas', { class: 'big', width: 384, height: 384 });
-    const preview = h('canvas', { width: 32, height: 32, style: { width: '96px', height: '96px', imageRendering: 'pixelated', borderRadius: '10px' } });
-    const pal = () => D.palettes[s.u8(off + 0x226) >> 4];
-    const px = i => { const b = s.u8(off + (i >> 1)); return i & 1 ? b >> 4 : b & 15; };
-    const setPx = (i, c) => { const a = off + (i >> 1), b = s.u8(a); s.set8(a, i & 1 ? (b & 0x0F) | (c << 4) : (b & 0xF0) | c); };
-    function draw() { drawPattern(big, s, off, 12); drawPattern(preview, s, off, 1); const g = big.getContext('2d'); g.strokeStyle = 'rgba(0,0,0,.06)'; for (let k = 1; k < 32; k++) { g.beginPath(); g.moveTo(k * 12, 0); g.lineTo(k * 12, 384); g.moveTo(0, k * 12); g.lineTo(384, k * 12); g.stroke(); } }
-    let down = false, history = [];
-    const at = e => { const r = big.getBoundingClientRect(); const x = Math.floor((e.clientX - r.left) / r.width * 32), y = Math.floor((e.clientY - r.top) / r.height * 32); return x >= 0 && y >= 0 && x < 32 && y < 32 ? y * 32 + x : -1; };
-    big.addEventListener('pointerdown', e => { history.push(s.bytes(off, 0x200)); if (history.length > 40) history.shift(); down = true; big.setPointerCapture(e.pointerId); const i = at(e); if (i >= 0) { if (e.altKey) { color = px(i); drawSw(); } else setPx(i, color); draw(); } });
-    big.addEventListener('pointermove', e => { if (!down) return; const i = at(e); if (i >= 0 && !e.altKey) { setPx(i, color); draw(); } });
-    big.addEventListener('pointerup', () => { down = false; sfx.click(); });
-    const sw = h('div', { class: 'swatches' });
-    function drawSw() {
-      sw.replaceChildren(h('button', { class: 'swatch clear' + (color === 0 ? ' on' : ''), title: 'Transparent', onclick: () => { color = 0; drawSw(); } }),
-        ...pal().map((c, i) => h('button', { class: 'swatch' + (color === i + 1 ? ' on' : ''), style: { background: c }, title: c, onclick: () => { color = i + 1; drawSw(); sfx.click(); } })));
-    }
-    const pals = h('div', { class: 'palettes' }, D.palettes.map((p, i) => {
-      const el = h('button', { class: 'pal' + ((s.u8(off + 0x226) >> 4) === i ? ' on' : ''), title: `Palette ${i + 1}`, onclick: () => { s.set8(off + 0x226, (s.u8(off + 0x226) & 0x0F) | (i << 4)); pals.querySelectorAll('.pal').forEach((x, k) => x.classList.toggle('on', k === i)); drawSw(); draw(); sfx.pop(); } }, p.map(c => h('i', { style: { background: c } })));
-      return el;
-    }));
-    const fileIn = h('input', { type: 'file', hidden: true, accept: '.acww,.bin,.png,image/png' });
-    fileIn.addEventListener('change', async () => {
-      const f = fileIn.files[0]; if (!f) return;
-      if (/\.png$/i.test(f.name) || f.type === 'image/png') { await importPng(f); }
-      else { const b = new Uint8Array(await f.arrayBuffer()); if (b.length < 0x228) { toast('That file is not a Wild World pattern', '⚠️'); return; } s.setBytes(off, b.slice(0, opts.full === false ? 0x200 : 0x228)); }
-      draw(); drawSw(); sfx.bell(); toast('Pattern imported', '🎨'); fileIn.value = '';
-    });
-    async function importPng(f) {
-      const img = new Image(); img.src = URL.createObjectURL(f); await img.decode();
-      const c = h('canvas', { width: 32, height: 32 }); const g = c.getContext('2d'); g.drawImage(img, 0, 0, 32, 32);
-      const d = g.getImageData(0, 0, 32, 32).data;
-      // Pick the palette with the smallest total color error, then map each pixel to its nearest color.
-      const rgb = hx => [1, 3, 5].map(k => parseInt(hx.substr(k, 2), 16));
-      let best = 0, bestErr = Infinity;
-      D.palettes.forEach((p, pi) => { const cols = p.map(rgb); let err = 0; for (let i = 0; i < 1024; i++) { if (d[i * 4 + 3] < 128) continue; err += Math.min(...cols.map(c2 => (c2[0] - d[i * 4]) ** 2 + (c2[1] - d[i * 4 + 1]) ** 2 + (c2[2] - d[i * 4 + 2]) ** 2)); } if (err < bestErr) { bestErr = err; best = pi; } });
-      s.set8(off + 0x226, (s.u8(off + 0x226) & 0x0F) | (best << 4));
-      const cols = D.palettes[best].map(rgb);
-      for (let i = 0; i < 1024; i++) {
-        if (d[i * 4 + 3] < 128) { setPx(i, 0); continue; }
-        let k = 0, e = Infinity; cols.forEach((c2, ci) => { const ee = (c2[0] - d[i * 4]) ** 2 + (c2[1] - d[i * 4 + 1]) ** 2 + (c2[2] - d[i * 4 + 2]) ** 2; if (ee < e) { e = ee; k = ci; } });
-        setPx(i, k + 1);
-      }
-      pals.querySelectorAll('.pal').forEach((x, k) => x.classList.toggle('on', k === best));
-    }
-    function download(name, blob) { const a = h('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); }
-    draw(); drawSw();
-    const nm = s.str(off + 0x216, 16) || 'pattern';
-    return h('div', { class: 'card' },
-      h('div', { class: 'pe' }, big,
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
-          h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } }, preview, h('div', null, h('div', { style: { fontWeight: 800, fontSize: '16px' } }, opts.title || 'Pattern'), h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Click or drag to draw · Alt-click to pick a color'))),
-          h('div', null, h('div', { class: 'muted', style: { fontSize: '12px', marginBottom: '6px', fontWeight: 700 } }, 'COLORS'), sw),
-          h('div', null, h('div', { class: 'muted', style: { fontSize: '12px', marginBottom: '6px', fontWeight: 700 } }, 'PALETTE (16 to choose from)'), pals),
-          h('div', { class: 'btn-row' },
-            h('button', { class: 'btn small', onclick: () => { const b = history.pop(); if (b) { s.setBytes(off, b); draw(); } } }, '↶ Undo'),
-            h('button', { class: 'btn small', onclick: () => { history.push(s.bytes(off, 0x200)); for (let i = 0; i < 1024; i++) setPx(i, color); draw(); } }, '🪣 Fill'),
-            h('button', { class: 'btn small', onclick: () => { history.push(s.bytes(off, 0x200)); const b = s.bytes(off, 0x200); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const i = y * 32 + x, j = y * 32 + 31 - x; const v = j & 1 ? b[j >> 1] >> 4 : b[j >> 1] & 15; setPx(i, v); } draw(); } }, '⇋ Flip'),
-            h('button', { class: 'btn small leaf', onclick: () => window.PatternImport.open(s, off, () => { draw(); drawSw(); pals.querySelectorAll('.pal').forEach((x, k) => x.classList.toggle('on', k === (s.u8(off + 0x226) >> 4))); }) }, '⬆︎ Import (picture, QR, file)'),
-            h('button', { class: 'btn small', onclick: () => download(nm + '.acww', new Blob([s.bytes(off, 0x228)])) }, '⬇︎ .acww'),
-            h('button', { class: 'btn small', onclick: () => { const c = h('canvas'); drawPattern(c, s, off, 8); c.toBlob(b => download(nm + '.png', b)); } }, '⬇︎ PNG'), fileIn))),
-      opts.full === false ? null : [
+    return [window.PatternStudio.studio(s, off, opts), opts.full === false ? null : h('div', { class: 'card', style: { marginTop: '12px' } }, [
         row('Pattern name', null, textInput(() => s.str(off + 0x216, 16), v => s.setStr(off + 0x216, 16, v), 16, { check: WWSave.canEncode }), off + 0x216),
         row('Made by', 'Creator name and home town', h('span', { style: { display: 'flex', gap: '6px' } },
           textInput(() => s.str(off + 0x20C, 8), v => s.setStr(off + 0x20C, 8, v), 8, { width: 'w-s', check: WWSave.canEncode }),
@@ -163,7 +103,7 @@
           s.setBytes(off + 0x200, s.bytes(b + 0x2276, 2)); s.setBytes(off + 0x202, s.bytes(b + 0x2278, 8));
           s.setBytes(off + 0x20A, s.bytes(b + 0x2280, 2)); s.setBytes(off + 0x20C, s.bytes(b + 0x2282, 8)); s.set8(off + 0x214, s.u8(b + 0x228A));
           sfx.bell(); APP.go(APP.view);
-        } }, 'Claim')) : null]);
+        } }, 'Claim')) : null])];
   }
   window.PatternEditor = { patternEditor, patternTile };
 
