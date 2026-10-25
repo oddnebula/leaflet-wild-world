@@ -170,6 +170,7 @@
       default: return '#f2bf3a';
     }
   };
+  window.WW_MAP_COLORS = MAP_COLORS;
   VIEWS.push({
     id: 'map', group: 'Town', icon: '🗺️', title: () => 'Town Map', sub: () => '4,096 spots across 16 acres',
     tips: ['Pick a brush item, then click and drag to paint. Hold Shift while painting to bury items instead.', 'The eyedropper copies any spot’s item into your brush.', 'Buildings are drawn in brown. Moving them can confuse the game, so tread lightly!'],

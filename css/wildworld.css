@@ -525,3 +525,7 @@ canvas.model3d:active { cursor: grabbing; }
 .lib-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .lib-seen { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 120px; overflow: auto; }
 @media (max-width: 640px) { .lib-detail { grid-template-columns: 1fr; } .lib-big canvas { width: 100%; height: auto; } }
+
+/* ---------- town card ---------- */
+.tc-holder { display: flex; justify-content: center; }
+.tc-canvas { max-width: 100%; height: auto; border-radius: 16px; box-shadow: 0 12px 30px -16px rgba(0,0,0,.55); }

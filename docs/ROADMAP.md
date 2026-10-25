@@ -56,7 +56,7 @@ A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon
 - **Sound test (S).** Browse every SSAR effect and SSEQ track by number, with names where known.
 
 ## Sharing and multiplayer
-- **Town card (S).** A shareable image of the town: map, fruit, tune, residents, neighbors, flag, house.
+- ✅ **Town card (S).** A shareable image of the town: map, fruit, tune, residents, neighbors, flag, house.
 - **Villager trading (M).** Export a neighbor (the 0x700-byte record) as a file and import into another save,
   the way the game moves villagers between towns.
 - **Item gifting between saves (S).** Copy items or patterns from one save to another with drag and drop.

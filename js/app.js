@@ -262,7 +262,7 @@
   { const bi = VIEWS.findIndex(v => v.id === 'backups'); if (bi > 1) VIEWS.splice(1, 0, ...VIEWS.splice(bi, 1)); }
   { const i = VIEWS.findIndex(v => v.id === 'patterns'), o = VIEWS.findIndex(v => v.id === 'house'); if (i > o && o >= 0) VIEWS.splice(o + 1, 0, ...VIEWS.splice(i, 1)); }
   // Today and the calendar come right after the town overview.
-  for (const id of ['diary', 'calendar', 'today']) { const i = VIEWS.findIndex(v => v.id === id), o = VIEWS.findIndex(v => v.id === 'overview'); if (i > o && o >= 0) VIEWS.splice(o + 1, 0, ...VIEWS.splice(i, 1)); }
+  for (const id of ['card', 'diary', 'calendar', 'today']) { const i = VIEWS.findIndex(v => v.id === id), o = VIEWS.findIndex(v => v.id === 'overview'); if (i > o && o >= 0) VIEWS.splice(o + 1, 0, ...VIEWS.splice(i, 1)); }
   buildNav();
   go('welcome');
   updateChrome();

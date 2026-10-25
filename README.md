@@ -1,6 +1,34 @@
 # Leaflet: a cozy Animal Crossing: Wild World save editor
 
-A save editor for Animal Crossing: Wild World (Nintendo DS) that works on macOS and Windows. It's built for current hardware, works fully offline, and needs no installer.
+**The most complete save editor ever made for *Animal Crossing: Wild World*.** Every byte of your town is mapped and
+editable, wrapped in a cozy, DS-style interface for macOS and Windows. It works offline and needs no installer.
+
+[**⬇︎ Download for macOS or Windows**](https://github.com/oddnebula/leaflet-wild-world/releases/latest)
+
+## ✨ Only in Leaflet
+
+No other Wild World editor we know of has these:
+
+- 🧬 **Every byte of the save mapped.** The whole 90 KB town block is laid out field by field from the game's
+  decompilation, and all eight checksums are kept valid. Nothing is left as "unknown".
+- 🏠 **Your house and neighbors in 3D**, rendered from the game's own models and placed exactly as in your save.
+- 🎶 **Your town's hourly music and every K.K. song**, played with the game's own instruments.
+- 📅 **A real town calendar.** Every festival, birthday and visitor is worked out from the game's own event schedule
+  for any year, and you can export it to Apple Calendar, Google Calendar or Outlook.
+- 🌞 **Today in Town**: the game clock, hourly weather, turnip prices, visitors, and what's out to catch right now.
+- 📔 **A Town Diary.** Leaflet watches your save while you play, keeps every version, and writes your town's story
+  from them: who moved in, what you caught and donated, loans paid off.
+- 🎨 **A pattern studio** with layers, mirror drawing, a palette swapper, picture and New Leaf QR import, and a library
+  of every design from every version of your town.
+- 📖 **A catalog with the game's real prices**, series, colors and Happy Room Academy points, plus a set tracker.
+- 🩺 **Save Doctor**, which finds and fixes the broken states old editors and cheat codes leave behind.
+- 🪪 **A shareable town card**: one image with your map, fruit, tune, flag, residents and neighbors.
+- ✨ **Editors for things nobody else touches**: Celeste's constellations, the bulletin board, the post office,
+  furniture switches and gyroid beats, Mom's letters, villager hobbies, and every one of the game's event flags.
+
+<sub>Compared with the open-source Wild World editors we know of (ACSE, LeafEdit, WildEdit, WildStorage and
+ACWW-Web-SaveEditor) as of October 2026. The 3D models, music and real prices need a ROM backup of your own
+cartridge. Everything else works with just a save file.</sub>
 
 Works with USA and European saves (256 KB `.sav` files from flashcarts, DeSmuME, melonDS and save dumpers).
 Japanese and Korean saves use a different layout and are not supported.
@@ -12,6 +40,8 @@ Japanese and Korean saves use a different layout and are not supported.
 > Not affiliated with or endorsed by Nintendo. See [LEGAL.md](LEGAL.md).
 
 ![Town overview](docs/screenshots/overview.png)
+
+![Town card](docs/screenshots/card.png)
 
 | | |
 |---|---|
@@ -82,6 +112,7 @@ Still, back up your save before playing an edited file.
 | Catalog browser | Every item the catalog can hold (furniture, clothing, accessories, umbrellas, wallpaper, carpets, songs, stationery, gyroids, fossils, art, pics) with each resident's catalog ticks, search, “not in my catalog” and “in the house now” filters, and add-all. With a ROM: the game's price, series, theme or set, two colors and Happy Room Academy points for each item, sortable. A **set tracker** shows every series, theme and set with what's registered, what's in the house and the HRA bonus a full set is worth |
 | Today in town | Your town's **hourly music** from the ROM (following the game clock and changing on the hour, or any hour you pick, looping). The game's own date and time (your clock plus the save's offset), what's happening today, the hour-by-hour weather if the day has been rolled, today's turnip price (or Joan's), what the museum still needs that's out right now, Crazy Redd's day, the Roost, a sick neighbor, birthdays, and the next two weeks |
 | Town diary | Your town's story, told by comparing each kept backup with the one before: residents and neighbors moving in and out, hobbies, first catches, catalog additions, museum donations (and who made them), bells earned and spent, Nook Points, loan payments, house upgrades, K.K. songs learned, town hall donations, a new town tune or flag, and the perfect-town streak |
+| Town card | One shareable picture of your town, drawn entirely by Leaflet (no game art): the map from above, native fruit, town tune, flag, residents, neighbors and milestones. Wide (1200×675) or square (1080×1080), four color themes, any section can be turned off. Download as PNG or copy to the clipboard |
 | Calendar | A month grid of every festival (Fishing Tourney, Bug-Off, Flower Fest, Fireworks, Acorn Festival, Bright Nights, flea markets, La-Di-Day and Yay Day, New Year), every resident's and neighbor's birthday, this week's visitors, Joan and K.K., resolved for any year from the game's own event schedule. **Export to .ics** for Apple Calendar, Google Calendar or Outlook |
 | Hidden flags | Mr. Resetti pending flag (and clearing it for everyone); **today's chats** (Celeste, Gracie, Wendell, Saharah, Mabel, Pascal, Lyle, Tortimer's events, Gulliver) with a “fresh day” reset; **errands** (both favors with their villagers, the Roost part-time job and its customers, the parcel to deliver, house-visit invitations, “call off”); **Wi-Fi friends** (names and towns, clear the roster, checksum kept valid); bit-level editors for every resident block |
 | Neighbors (×8) | Species, personality, catchphrase, home town, shirt, umbrella, **current hobby** (with the eight hobby scores, pending scores and when it was set), a planned favor for a resident, a room view of their house (wallpaper, flooring, 10 furniture pieces, which pieces are on display, room layout, furniture taste), moving their house on a mini map (the building, its footprint and their stored position move together), 4 held items, where they moved from |
