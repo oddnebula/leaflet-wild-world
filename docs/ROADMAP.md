@@ -40,6 +40,11 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [ ] Main Street in 3D: Nook's with this week's stock, the Able Sisters, the museum.
 - [x] Walk around the whole town in 3D, or see it from above: every map item exactly placed, the ground shaped from each acre's type (drawn by Leaflet).
 
+**Patterns**
+- [x] Wendell's corner on the Pattern Library: his 32 designs by name (read from your ROM), with the ones already in your towns ready to copy into any slot.
+- [x] Leaflet's pattern pack: 32 original designs, free to use.
+- [ ] Wendell's designs' pictures straight from the ROM: their pixels aren't stored plainly in the ROM (only their names are, in myOrg/myD.bin), so they still have to be found.
+
 **Chunk 5: polish**
 - [x] Compare any two backups: the diary's story of what changed, and which parts of the save differ (Backups page).
 - [x] Undo and redo across every page (⌘Z, ⇧⌘Z), for the session.

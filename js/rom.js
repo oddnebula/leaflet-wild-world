@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   const DB = 'leaflet-rom', STORE = 'files', KEY = 'ADME';
-  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^font\/fontA_(head|attr|img)\.bin$/];
+  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^font\/fontA_(head|attr|img)\.bin$/, /^myOrg\//];
   let files = null;            // Map path -> Uint8Array (raw, possibly compressed)
   let stale = false;           // a cache from an older Leaflet that lacks files this version reads (the start card asks for the ROM again)
   const listeners = new Set();
@@ -244,13 +244,23 @@
     return fontCache;
   }
 
+  // The game's built-in designs' names (myOrg/myD.bin: 50 records of 0x2C bytes; +0 palette, +1 kind, +2 name,
+  // +0x13 creator, +0x1E town, all ASCII). Records 18–49 are Wendell's, from Tuskany.
+  function builtInDesigns() {
+    const f = file('myOrg/myD.bin'); if (!f) return null;
+    const txt = (o, n) => { let t = ''; for (let i = 0; i < n && f[o + i]; i++) t += String.fromCharCode(f[o + i]); return t; };
+    const out = [];
+    for (let k = 0; k * 0x2C + 0x2C <= f.length; k++) { const o = k * 0x2C; out.push({ k, palette: f[o], name: txt(o + 2, 16), by: txt(o + 0x13, 9), town: txt(o + 0x1E, 14) }); }
+    return out;
+  }
+
   async function restore() {
     const map = await loadCache();
     if (map && map.size) { files = map; stale = WANT.some(re => ![...map.keys()].some(k => re.test(k))); loadSound(); listeners.forEach(f => f()); }
   }
 
   window.ROM = {
-    open, restore, forget, font, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
+    open, restore, forget, font, builtInDesigns, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
     get ready() { return !!files; },
     get stale() { return stale; },
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },

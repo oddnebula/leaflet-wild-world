@@ -660,3 +660,15 @@ canvas.model3d:active { cursor: grabbing; }
 .tb-btn.icon-only:disabled { opacity: .45; }
 .cmp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .cmp-parts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+/* Wendell's corner: a seaside banner over the pattern library */
+.wendell-hero { position: relative; display: flex; align-items: stretch; overflow: hidden; border-radius: 22px; border: 4px solid #fff; box-shadow: 0 5px 0 #8ec9e8; background: linear-gradient(180deg, #bfe9ff 0%, #8fd8ff 55%, #f6e3a4 55%, #f6e3a4 100%); margin-bottom: 6px; }
+.wh-sea { position: relative; width: 170px; flex: none; background: repeating-radial-gradient(circle at 50% 120%, #4fa7dc 0 8px, #6fbde8 8px 16px); }
+.wh-boat { position: absolute; left: 40px; top: 22px; font-size: 52px; animation: wh-bob 3.6s ease-in-out infinite; }
+.wh-fish { position: absolute; left: 100px; bottom: 18px; font-size: 26px; animation: wh-bob 2.4s ease-in-out infinite reverse; }
+@keyframes wh-bob { 50% { transform: translateY(-6px) rotate(-4deg); } }
+.wh-text { padding: 16px 20px; background: rgba(255, 249, 232, .9); }
+.wh-text h2 { margin: 0 0 4px; font-size: 22px; color: #1d5a8a; }
+.wh-text p { margin: 0; color: var(--text-2); line-height: 1.5; }
+.pattern-tile.missing { opacity: .7; border-style: dashed !important; }
+.wh-q { width: 100%; aspect-ratio: 1; border-radius: 10px; display: grid; place-items: center; font-size: 26px; font-weight: 900; color: #8ec9e8; background: repeating-linear-gradient(45deg, #eef8ff 0 6px, #ffffff 6px 12px); }
+@media (prefers-reduced-motion: reduce) { .wh-boat, .wh-fish { animation: none; } }

@@ -40,6 +40,10 @@ If you choose to open a ROM:
   save editors publish. Sources and licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - **Your own saves only.** Leaflet is meant for editing saves of games you own, for personal use.
 
+## Designs
+
+Leaflet's pattern pack is original work, drawn for Leaflet; it copies no design from the game, its guide books or other players. Wendell's designs are listed by name from your own ROM, and only the ones already in your own saves can be copied into a slot. Leaflet doesn't include or download any of them.
+
 ## Leaflet Link (Cartridge Sync)
 
 Leaflet Link is an optional 3DS app that lets Leaflet read and write the **save** on your Wild World game card over

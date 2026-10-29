@@ -108,6 +108,8 @@
       if (buf) { this.remember(buf, o, n); buf.set(out, o); this.markDirty(); } else this.setBytes(o, out);
     }
     static canEncode(s) { for (const ch of s) if (!ENCODE.has(ch)) return false; return true; }
+    // Text in the game's character set, n bytes, zero-padded (for building records outside a save).
+    static encode(s, n) { const out = new Uint8Array(n); let i = 0; for (const ch of s) { if (i >= n) break; const c = ENCODE.get(ch); out[i++] = c === undefined ? ENCODE.get('?') : c; } return out; }
 
     // ---- undo and redo ---------------------------------------------------------------
     // Every write records the bytes it replaces. Writes less than 0.7 s apart on the same page make one step, so one
