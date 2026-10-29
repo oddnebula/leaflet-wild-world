@@ -42,20 +42,23 @@
 } }
 
 /* ---------- scrolling patterned backdrop (changes with the time of day) ---------- */
+/* A gingham check scattered with leaves and little flowers, in the spirit of Wild World's menu screens (drawn here,
+   no game art). The colours follow the clock: buttery morning, leafy day, sunset-pink evening, starry-blue night. */
 body {
   font-weight: 650;
   background-color: var(--tod-base, #a8df9a);
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='%23ffffff' fill-opacity='.28'%3E%3Ccircle cx='12' cy='12' r='6'/%3E%3Ccircle cx='60' cy='60' r='6'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='.22'%3E%3Cpath d='M60 6c-8 4-10 12-6 18 7-1 12-8 6-18z'/%3E%3Cpath d='M12 54c-8 4-10 12-6 18 7-1 12-8 6-18z'/%3E%3C/g%3E%3C/svg%3E"),
-    linear-gradient(135deg, var(--tod-a, #b6e8a6) 25%, var(--tod-b, #a2dc92) 25% 50%, var(--tod-a, #b6e8a6) 50% 75%, var(--tod-b, #a2dc92) 75%);
-  background-size: 96px 96px, 64px 64px;
-  animation: ww-scroll 22s linear infinite;
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Cg fill='%23ffffff' fill-opacity='.5'%3E%3Cpath d='M30 14c-12 3-17 15-12 24 11-1 18-11 12-24z'/%3E%3Cpath d='M94 78c-12 3-17 15-12 24 11-1 18-11 12-24z'/%3E%3C/g%3E%3Cg stroke='%23ffffff' stroke-opacity='.7' stroke-width='1.6' stroke-linecap='round' fill='none'%3E%3Cpath d='M18 38 29 18'/%3E%3Cpath d='M82 102 93 82'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='.45'%3E%3Ccircle cx='96' cy='24' r='4'/%3E%3Ccircle cx='104' cy='24' r='4'/%3E%3Ccircle cx='100' cy='20' r='4'/%3E%3Ccircle cx='100' cy='28' r='4'/%3E%3Ccircle cx='32' cy='88' r='4'/%3E%3Ccircle cx='40' cy='88' r='4'/%3E%3Ccircle cx='36' cy='84' r='4'/%3E%3Ccircle cx='36' cy='92' r='4'/%3E%3C/g%3E%3Cg fill='%23fff3a8' fill-opacity='.85'%3E%3Ccircle cx='100' cy='24' r='2.4'/%3E%3Ccircle cx='36' cy='88' r='2.4'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(90deg, var(--tod-check, rgba(255,255,255,.22)) 50%, transparent 50%),
+    linear-gradient(0deg, var(--tod-check, rgba(255,255,255,.22)) 50%, transparent 50%);
+  background-size: 128px 128px, 32px 32px, 32px 32px;
+  animation: ww-scroll 26s linear infinite;
 }
-@keyframes ww-scroll { to { background-position: 96px 96px, 64px 64px; } }
-html.tod-morning { --tod-base: #ffe3b0; --tod-a: #ffe9c2; --tod-b: #ffdca6; }
-html.tod-day { --tod-base: #a8df9a; --tod-a: #b6e8a6; --tod-b: #a2dc92; }
-html.tod-evening { --tod-base: #ffc29a; --tod-a: #ffcfab; --tod-b: #ffbb92; }
-html.tod-night { --tod-base: #3b4a86; --tod-a: #44549a; --tod-b: #3b4a8a; }
+@keyframes ww-scroll { to { background-position: 128px 128px, 32px 0, 0 32px; } }
+html.tod-morning { --tod-base: #f6e3a4; --tod-check: rgba(255,255,255,.3); }
+html.tod-day { --tod-base: #a8df9a; --tod-check: rgba(255,255,255,.24); }
+html.tod-evening { --tod-base: #e9b7c8; --tod-check: rgba(255,255,255,.26); }
+html.tod-night { --tod-base: #3b4a86; --tod-check: rgba(255,255,255,.08); }
 
 /* ---------- sidebar: polka-dot menu panel ---------- */
 .sidebar {
