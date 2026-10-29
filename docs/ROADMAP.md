@@ -50,6 +50,42 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [x] Undo and redo across every page (⌘Z, ⇧⌘Z), for the session.
 - [ ] Japanese and Korean saves: every offset and the character set differ, so this needs a Japanese save and decompilation to map against first.
 
+## 2.0: checked against what Leaflet already has (October 29, 2026)
+Already built, so left off this list: Today in Town (catchable now, weather, visitors), the Calendar with .ics, the Town
+Card, the Pattern studio (layers, mirror, picture import), the Save Doctor, groundskeeping and perfect-acre counts, the
+turnip advisor, the Completion score, the letter Game view, the 2D room editor, and EU saves.
+
+**Chunk A: the town alive**
+- [ ] Living 3D town: the save's clock lights it, seasons color the ground, today's weather from the save (rain, snow), the
+  neighbors outside today (the outdoor list at 0xC258) walking about, the hourly music playing.
+- [ ] Arrange furniture in 3D: drag, rotate and stack in the 3D room, written straight back to the save.
+- [ ] Photo mode for every 3D view (town, rooms, sky), saved as postcards.
+
+**Chunk B: for planners and completionists**
+- [ ] Town planner: paint trees, flowers and paths over the map with each acre's perfect-town status updating live.
+- [ ] Flower breeding planner: which pairs to plant side by side for every hybrid, on your own map.
+- [ ] Tomorrow and next week: everything the game has already rolled (tomorrow's weather, the week's turnip prices,
+  this week's visitors, Nook's restock, the next festival), on one page.
+- [ ] Badges across all your towns, earned from save data (golden tools, full museum, Platinum member, savings letters).
+- [ ] Town vs town: two different towns side by side (the Backups compare only does versions of one town).
+
+**Chunk C: for hardcore fans**
+- [ ] Game script browser: every line of dialogue and every letter template, read from your ROM's message archives and
+  searchable. Also the way to name the last unnamed flags.
+- [ ] Action Replay codes: turn edits into AR codes for people playing on a real DS without a save dumper.
+- [ ] Town randomizer and challenge saves: random neighbors, fruit, tune and acres, or challenge starts (no tools, no
+  money, one neighbor), always applied to a copy.
+- [ ] Two towns on one computer: two melonDS windows over local wireless so you can visit a friend's town.
+
+**Chunk D: polish and platforms**
+- [ ] Update notice in the app, a notarized Mac app and a Windows installer.
+- [ ] Accessibility pass: keyboard-only use, screen-reader labels, color-blind-safe palettes, reduced motion.
+- [ ] Translations: Japanese, French, German, Spanish and Italian.
+- [ ] Linux: the Windows helper's features as a script.
+
+**Research still open:** the remaining unnamed flags (see RESEARCH.md), Feng Shui scoring, move-out rules, Wendell's
+design pixels, gyroid sound IDs, villager voice pitch, MelodyPlayer, JP/KR saves.
+
 ## Living with your town
 - ✅ **Town diary (S–M).** Every backup is already a snapshot. Diff consecutive ones into a readable journal:
   "Oct 19: Bob moved in. Donated a coelacanth. Paid 98,000 bells on the loan. Limberg started gardening." A timeline

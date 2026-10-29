@@ -17,7 +17,12 @@
     if (!s.copyStatus[0] || !s.copyStatus[1]) issue('note', 'One of the two copies inside the file was damaged', 'Leaflet loaded the healthy one. Saving writes both copies again.', null);
     if (!s.lettersValid) issue('note', 'The town hall mailbox checksum was off', 'It is recalculated when you save.', null);
     if (!s.str(4, 8).trim()) issue('warn', 'The town has no name', 'Some screens show a blank where the town name goes.', null, 'town');
-    if (s.u8(0x15FDE) === 0x1C) issue('note', 'The last session ended without saving', 'Mr. Resetti will be waiting next time you play.', ['Mark as saved properly', () => s.set8(0x15FDE, 2)]);
+    // The game marks both the main block (0x15FDE) and the town hall's letter storage (its byte at +0x11DF0, 0x3FFFC in
+    // the file) as 0x1C while you play and 2 when you save. On loading, letter storage not marked 2 is wiped clean.
+    const LSTATE = 0x11DF0, lettersUnsaved = s.letters[LSTATE] !== 2;
+    const markSaved = () => { s.set8(0x15FDE, 2); if (lettersUnsaved) s.lset16(LSTATE, (s.lu16(LSTATE) & 0xFF00) | 2); };
+    if (lettersUnsaved) issue('warn', 'The letters kept at the town hall are about to be erased', 'The last session didn’t finish saving, and when that happens the game clears every letter stored at the town hall the next time it loads. Marking the save as finished keeps them.', ['Mark as saved properly', markSaved]);
+    else if (s.u8(0x15FDE) === 0x1C) issue('note', 'The last session ended without saving', 'Mr. Resetti will be waiting next time you play.', ['Mark as saved properly', markSaved]);
     if (s.u32(0x15E58) > 4) issue('error', `The native fruit is ${s.u32(0x15E58)}`, 'Only 0–4 (apple, orange, pear, peach, cherry) exist.', ['Set it to apples', () => s.set32(0x15E58, 0)], 'town');
     // Residents
     for (const p of ps) {

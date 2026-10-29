@@ -147,7 +147,7 @@
         card(...CHORES.map(([em, label, desc, fn]) => row(`${em}  ${label}`, desc, h('button', { class: 'btn small', onclick: async () => { const msg = fn(s); sfx.bell(); toast(msg, em); refresh(); } }, 'Do it')))),
         section('Town event flags', '32 town-wide flags at 0x15FD8'),
         h('div', { class: 'callout' }, h('span', { class: 'em' }, '🧪'), h('div', null, h('b', null, 'These change what happens in-game'), 'Some are cleared every day by the game. Turning a “received” flag off can make a gift arrive again.')),
-        window.FlagList(s, 0x15FD8, 32, window.WW_FLAGS.town, 'Town'),
+        window.FlagList(s, 0x15FD8, 32, window.WW_FLAGS.town, 'Town', window.WW_FLAGS.unused.town),
         section('Perfect town check', `${perfectCount} of 16 acres look perfect`),
         h('div', { class: 'card' }, ptGrid),
       ];

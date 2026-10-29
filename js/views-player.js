@@ -155,7 +155,7 @@
   window.BitBytes = bitBytes;
 
   // Named event-flag list (resident flags at +0x21FC, town flags at 0x15FD8).
-  function flagList(s, base, count, table, label) {
+  function flagList(s, base, count, table, label, unused = []) {
     const named = Object.keys(table).map(Number).filter(n => n < count);
     const list = h('div', { class: 'flag-list' }, named.map(n => {
       const f = table[n];
@@ -166,12 +166,16 @@
       UI.register(el, f.name, `${label} flag #${n}`);
       return el;
     }));
-    const rest = h('div', { class: 'bitgrid' }, [...Array(count).keys()].filter(n => !table[n]).map(n => {
-      const b = h('button', { class: 'bit' + (s.bit(base, n) ? ' on' : ''), title: `${label} flag #${n} (meaning unknown)` }, n);
+    const bit = n => {
+      const b = h('button', { class: 'bit' + (s.bit(base, n) ? ' on' : ''), title: unused.includes(n) ? `${label} flag #${n} (never used by the game)` : `${label} flag #${n} (meaning unknown)` }, n);
       b.onclick = () => { s.setBit(base, n, !s.bit(base, n)); b.classList.toggle('on'); sfx.toggle(b.classList.contains('on')); };
       return b;
-    }));
-    return h('div', { class: 'card' }, list, h('div', { class: 'row' }, h('div', { class: 'row-label' }, h('div', { class: 't' }, 'Unnamed flags'), h('div', { class: 'd' }, 'Used by the game, but what they do hasn’t been worked out yet.'))), rest);
+    };
+    const open = [...Array(count).keys()].filter(n => !table[n] && !unused.includes(n));
+    const head = (t, d) => h('div', { class: 'row' }, h('div', { class: 'row-label' }, h('div', { class: 't' }, t), h('div', { class: 'd' }, d)));
+    return h('div', { class: 'card' }, list,
+      open.length ? [head('Unnamed flags', 'Used by the game, but what they do hasn’t been worked out yet.'), h('div', { class: 'bitgrid' }, open.map(bit))] : null,
+      unused.length ? [head('Unused bits', 'No code in the game reads or writes these, so changing them does nothing.'), h('div', { class: 'bitgrid' }, unused.map(bit))] : null);
   }
   window.FlagList = flagList;
 
@@ -456,7 +460,7 @@
             h('div', { class: 'callout' }, h('span', { class: 'em' }, '🧪'), h('div', null, h('b', null, 'Event flags change what happens in-game'), 'Turning a “received” flag on can make a character skip giving you an item, and turning it off can make them give it again. Story flags can repeat or skip events. Change one at a time.')),
             card(row('Clear Resetti for everyone', 'Turns off flag #2 on all residents, so nobody gets a lecture next time.', h('button', { class: 'btn small', onclick: () => { for (let q = 0; q < 4; q++) s.setBit(s.playerBase(q) + 0x21FC, 2, false); sfx.bell(); toast('Resetti’s taking the day off', '😴'); refresh(); } }, 'All residents'))),
             section('Event flags', '64 per resident, found in the decompilation'),
-            flagList(s, b + 0x21FC, 64, window.WW_FLAGS.player, 'Resident'),
+            flagList(s, b + 0x21FC, 64, window.WW_FLAGS.player, 'Resident', window.WW_FLAGS.unused.player),
             section('Today’s chats', `For ${[s.u8(b + 0x21F1), s.u8(b + 0x21F0)].join('/')}/20${String(s.u8(b + 0x21F2)).padStart(2, '0')} · cleared on a new day`),
             card(row('Fresh day', 'Clear every bit so the characters treat you as if you haven’t spoken yet today.', h('button', { class: 'btn small', onclick: () => { for (let i = 0; i < 8; i++) s.set8(b + 0x21F4 + i, 0); sfx.pop(); toast('Everyone has something new to say', '💬'); refresh(); } }, 'Clear today'))),
             flagList(s, b + 0x21F4, 64, TALK, 'Daily'),

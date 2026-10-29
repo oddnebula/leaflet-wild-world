@@ -63,3 +63,23 @@ online event (0x15E29) and padding the game never reads (villager plan +0x22, vi
 
 Not done yet: the town tune with the game's melody instrument (MelodyPlayer plays one sequence per note from its own
 archive), and which weeks Lyle visits (EventWeek_IsInLyleWeek) for the calendar.
+
+## Outside the main block (2026-10-29)
+The game's save code writes exactly three regions (`data_020d0794`: 0x0, 0x15FE0, 0x2E20C), so:
+- **0x2BFC0–0x2E20C (0x224C bytes) is never written or read.** It stays zero on real cartridges.
+- **Letter storage tail:** +0x11DC0–0x11DEF padding; **+0x11DF0 (0x3FFFC in the file) is its save-state byte**, set to 0x1C
+  while playing and 2 on a proper save (func_0209d604 / func_0209d5f8), alongside 0x15FDE. On load, if this byte isn't 2 or
+  the storage checksum is wrong, the game **erases all town hall letters** (func_0209d610, Unk_020e27d4::vfunc_00).
+  +0x11DF1 padding; +0x11DF2 checksum.
+
+## Event flags (2026-10-29)
+Scanned every call to the flag functions in main and all overlays, including C++-mangled calls
+(test/set/clear: func_02098044 / 0209801c / 02097ff4 for residents, func_0209e170 / e148 / e120 for the town).
+- Resident 17–21: Pelly's savings letters at 1M, 10M, 100M, 500M and 999,999,999 bells (func_02097214).
+- Resident 28–31: Nook Point member letters from the ATM; tiers `data_020d0994` = 300, 5,000, 10,000, 20,000 points.
+- Resident 11: Harriet's first-visit talk; 12: Crazy Redd; 16: Dr. Shrunk's first lesson; 14: Happy Room Academy's first score.
+- Resident 23–26: accident insurance (signed up, pitch heard, two pending claims cleared when the payout is mailed).
+- Town 1, 2, 11: Happy Room Academy house models at 70,000 / 100,000 / 150,000 points (func_02059adc).
+- **Never used by any code:** resident 52 and 58–63; town 10 and 21–31.
+- Still only placed by overlay, not by meaning: resident 0, 5, 9, 10, 13, 15, 22, 27, 35, 49, 50, 57 and town 0, 5–9, 12,
+  14, 16–20. Their dialogue text (in the ROM's message archives) is the way to name them.
