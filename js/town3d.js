@@ -1,16 +1,20 @@
 // The town in 3D, to walk around. Everything on the town map is placed exactly where the save has it (trees, fruit,
 // flowers, weeds, rocks, signs and every building with its footprint); the ground (grass, rivers, ponds, beaches,
 // cliffs, bridges) is shaped from Leaflet's own acre drawings (js/acreart.js), so it's close to the game's but not
-// exact. Everything is drawn by Leaflet: no game models or art.
+// exact. The town lives by the save: the game clock sets the light, the game's date the season (snow, autumn leaves,
+// the cherry blossoms of early April) and the weather the game rolled for today brings clouds, rain or snow. Everything
+// is drawn by Leaflet: no game models or art (the optional music is the game's own, from the player's ROM).
 (function () {
   'use strict';
-  const { h, sfx, item } = UI;
+  const { h, sfx, item, toast } = UI;
   const VIEWS = (window.VIEWS = window.VIEWS || []);
-  const MAP = 0xC354, ACRES = 0xC330, N = 64;
+  const MAP = 0xC354, ACRES = 0xC330, N = 64, WX = 0x15F66;
+  const D = window.WW_DATA;
 
   // ---------- a tiny renderer: coloured triangles, fog, perspective ----------
-  const VS = 'attribute vec3 p; attribute vec3 c; uniform mat4 m; varying vec3 vc; varying float d; void main() { vec4 q = m * vec4(p, 1.0); gl_Position = q; vc = c; d = q.w; }';
-  const FS = 'precision mediump float; varying vec3 vc; varying float d; uniform vec3 fog; uniform float far; void main() { float f = clamp((d - far * 0.35) / (far * 0.65), 0.0, 1.0); gl_FragColor = vec4(mix(vc, fog, f), 1.0); }';
+  // Each vertex has a colour and a glow (windows at night); `light` tints everything for the hour and weather.
+  const VS = 'attribute vec3 p; attribute vec3 c; attribute float g; uniform mat4 m; varying vec3 vc; varying float d; varying float vg; void main() { vec4 q = m * vec4(p, 1.0); gl_Position = q; vc = c; vg = g; d = q.w; }';
+  const FS = 'precision mediump float; varying vec3 vc; varying float d; varying float vg; uniform vec3 fog; uniform vec3 light; uniform float far; uniform float night; void main() { float f = clamp((d - far * 0.35) / (far * 0.65), 0.0, 1.0); vec3 col = mix(vc * light, vc * 1.15, vg * night); gl_FragColor = vec4(mix(col, fog, f * (1.0 - vg * night * 0.6)), 1.0); }';
   function mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
   function persp(fov, asp, n, f) { const t = 1 / Math.tan(fov / 2), o = new Float32Array(16); o[0] = t / asp; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f); return o; }
   function look(e, c) {
@@ -23,9 +27,11 @@
 
   // ---------- geometry ----------
   function builder() {
-    const P = [], C = [];
-    const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) C.push(...col); };
+    const P = [], C = [], G = [];
+    let glow = 0;
+    const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) { C.push(...col); G.push(glow); } };
     const quad = (a, b, c, d, col) => { tri(a, b, c, col); tri(a, c, d, col); };
+    const lit = (f) => { glow = 1; f(); glow = 0; };
     const shade = (col, k) => col.map(v => Math.min(1, v * k));
     function box(x0, y0, z0, x1, y1, z1, col) {
       quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], col);
@@ -50,8 +56,43 @@
         tri(p0, top, p1, shade(col, lit)); tri(p1, bot, p0, shade(col, lit * 0.75));
       }
     }
-    return { P, C, box, quad, roof, blob, shade };
+    return { P, C, G, box, quad, roof, blob, shade, lit };
   }
+
+  // ---------- the town's day: season, light and weather ----------
+  // Snow lies on the ground from mid-December to late February, and every fruit tree is in blossom from April 1 to 10.
+  function seasonOf(d) {
+    const m = d.getMonth() + 1, day = d.getDate();
+    if (m === 4 && day <= 10) return 'bloom';
+    if ((m === 12 && day >= 11) || m === 1 || (m === 2 && day <= 24)) return 'snow';
+    return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'fall' : 'winter';
+  }
+  const GRASS = { spring: ['#6dbd63', '#62b25a'], bloom: ['#6dbd63', '#62b25a'], summer: ['#5cb352', '#53a84b'], fall: ['#a9bd5a', '#9eb352'], winter: ['#8fae7a', '#86a572'], snow: ['#f1f5f8', '#e6edf2'] };
+  // Light and sky by the hour (a smooth day: night, dawn, day, evening, dusk) and how much windows glow.
+  const DAY = [[0, [0.36, 0.4, 0.66], [0.07, 0.09, 0.22], 1], [4.5, [0.36, 0.4, 0.66], [0.07, 0.09, 0.22], 1], [6, [0.95, 0.78, 0.72], [0.98, 0.74, 0.62], 0.3],
+    [8, [1, 1, 1], [0.62, 0.84, 0.98], 0], [16, [1, 1, 1], [0.62, 0.84, 0.98], 0], [18, [1, 0.8, 0.62], [0.98, 0.64, 0.46], 0.2], [19.5, [0.62, 0.56, 0.82], [0.34, 0.3, 0.56], 0.7],
+    [21, [0.36, 0.4, 0.66], [0.07, 0.09, 0.22], 1], [24, [0.36, 0.4, 0.66], [0.07, 0.09, 0.22], 1]];
+  const WX_WORD = ['Clear', 'Some clouds', 'Cloudy', 'Rain', 'Heavy rain'];
+  function skyAt(hour, lv, snowy) {
+    let i = 0; while (DAY[i + 1][0] <= hour) i++;
+    const [h0, l0, s0, n0] = DAY[i], [h1, l1, s1, n1] = DAY[i + 1], f = (hour - h0) / (h1 - h0 || 1), mix = (a, b) => a.map((v, k) => v + (b[k] - v) * f);
+    let light = mix(l0, l1), fog = mix(s0, s1); const night = n0 + (n1 - n0) * f;
+    // Clouds grey the sky and dim the light; snow days stay bright.
+    const grey = [0, 0.15, 0.35, 0.55, 0.7][lv] || 0, dim = [1, 0.97, 0.9, 0.78, 0.68][lv] || 1;
+    const luma = fog[0] * 0.3 + fog[1] * 0.55 + fog[2] * 0.15, cloud = snowy && lv >= 3 ? [0.86, 0.88, 0.92].map(v => v * Math.max(0.35, luma / 0.8)) : [0.62, 0.65, 0.7].map(v => v * Math.max(0.3, luma / 0.8));
+    fog = fog.map((v, k) => v + (cloud[k] - v) * grey);
+    light = light.map(v => v * (snowy && lv >= 3 ? Math.max(dim, 0.85) : dim));
+    return { light, fog, night };
+  }
+  // The weather the game rolled: a 24-hour pattern for the save's weather day (or tomorrow's pattern, rolled yesterday).
+  function weatherPattern(s, now) {
+    const [d, m, y] = s.bytes(WX, 3); if (!m) return null;
+    const day = new Date(2000 + y, m - 1, d), same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    if (same(day, now)) return s.u8(WX + 4);
+    if (same(new Date(day.getTime() + 86400e3), now)) return s.u8(WX + 5);
+    return null;
+  }
+  const wxLevel = (pat, hour) => pat === null ? 0 : +((D.weather[pat] || '')[(hour + 18) % 24] || 0);
 
   // ---------- the town ----------
   const TREE = { Cedar: '#2f7a45', Palm: '#57b04a', Apple: '#e4483d', Orange: '#f39a2b', Pear: '#c9d64a', Peach: '#f49ab0', Cherry: '#b8263b', Coconut: '#8a5a2b', Money: '#f2c230', Bells: '#f2c230' };
@@ -60,7 +101,7 @@
     [/Able/, '#f6d6e6', '#d0607a', 1.7], [/Gate/, '#e8d6a8', '#c8553d', 1.6], [/Tent/, '#e8d070', '#b04848', 1.4], [/Ship|Car/, '#c8c8d0', '#5070a8', 1.0], [/Sign|Board|Mailbox|Countdown/, '#c08a50', null, 0.9]];
   const NEIGHBOR_COLORS = ['#e9c46a', '#a8d8ea', '#f4a6a6', '#b8e0a8', '#d6b8f0', '#f6d6a8', '#a8c8f0', '#f0b8d8'];
 
-  function build(s) {
+  function build(s, season) {
     const B = builder(), G = window.WW_ACRE_CANVAS, AC = window.WW_ACRE_COLORS;
     const kind = new Uint8Array(N * N);     // 0 grass, 1 water, 2 sand, 3 cliff, 4 bridge
     const solid = new Uint8Array(N * N);    // can't walk here
@@ -81,7 +122,8 @@
     // Ground, with banks where it drops to water and rises to a cliff.
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const k = kind[y * N + x], hgt = height(k), chk = (x + y) & 1;
-      const col = k === 1 ? hexc('#4fa7dc', chk ? 1 : 0.95) : k === 2 ? hexc('#ecd9a0', chk ? 1 : 0.96) : k === 3 ? hexc('#4c9a52', chk ? 1 : 0.94) : k === 4 ? hexc('#b07a44', chk ? 1 : 0.9) : hexc(chk ? '#6dbd63' : '#62b25a');
+      const snow = season === 'snow', grass = GRASS[season];
+      const col = k === 1 ? hexc(snow ? '#7ab3d6' : '#4fa7dc', chk ? 1 : 0.95) : k === 2 ? hexc(snow ? '#eee6d0' : '#ecd9a0', chk ? 1 : 0.96) : k === 3 ? hexc(snow ? '#e3eaef' : '#4c9a52', chk ? 1 : 0.94) : k === 4 ? hexc('#b07a44', chk ? 1 : 0.9) : hexc(grass[chk]);
       const y0 = k === 4 ? 0.05 : hgt;
       B.quad([x, y0, y], [x, y0, y + 1], [x + 1, y0, y + 1], [x + 1, y0, y], col);
       if (k === 1 || k === 3) solid[y * N + x] = 1;
@@ -95,9 +137,10 @@
       }
     }
     // A skirt of ground and sea beyond the edges, so the town doesn't end at a cliff into nothing.
-    B.quad([-40, -0.02, -40], [-40, -0.02, 0], [N + 40, -0.02, 0], [N + 40, -0.02, -40], hexc('#4f9e52'));
-    B.quad([-40, -0.02, 0], [-40, -0.02, N], [0, -0.02, N], [0, -0.02, 0], hexc('#4f9e52'));
-    B.quad([N, -0.02, 0], [N, -0.02, N], [N + 40, -0.02, N], [N + 40, -0.02, 0], hexc('#4f9e52'));
+    const skirt = hexc(GRASS[season][1], 0.85);
+    B.quad([-40, -0.02, -40], [-40, -0.02, 0], [N + 40, -0.02, 0], [N + 40, -0.02, -40], skirt);
+    B.quad([-40, -0.02, 0], [-40, -0.02, N], [0, -0.02, N], [0, -0.02, 0], skirt);
+    B.quad([N, -0.02, 0], [N, -0.02, N], [N + 40, -0.02, N], [N + 40, -0.02, 0], skirt);
     B.quad([-40, -0.35, N], [-40, -0.35, N + 60], [N + 40, -0.35, N + 60], [N + 40, -0.35, N], hexc('#3d86c4'));
 
     // Everything on the map.
@@ -112,11 +155,14 @@
         solid[y * N + x] = 1;
         const small = /Sapling|Small|Young/.test(name) ? 0.45 : /Medium/.test(name) ? 0.7 : 1, palm = cat === 'Palm Trees' || /Palm|Coconut/.test(name), cedar = /Cedar/.test(name);
         B.box(cx - 0.09, base, cz - 0.09, cx + 0.09, base + 1.1 * small, cz + 0.09, hexc('#8a5a32'));
-        if (cedar) { B.blob(cx, base + 0.9 * small, cz, 0.55 * small, 1.6 * small, hexc('#2f7a45')); }
+        // Leaves by season: orange and red in autumn, pink in the April blossom, darker in winter with snow on top.
+        const leaf = season === 'fall' ? ((x * 7 + y * 3) % 3 ? '#d9882b' : '#c9562b') : season === 'bloom' && !palm ? '#f6b6cb' : season === 'snow' || season === 'winter' ? '#367a46' : '#3f9a4a';
+        if (cedar) { B.blob(cx, base + 0.9 * small, cz, 0.55 * small, 1.6 * small, hexc(season === 'snow' || season === 'winter' ? '#2a6b3e' : '#2f7a45')); }
         else if (palm) { B.blob(cx, base + 1.25 * small, cz, 0.7 * small, 0.25 * small, hexc('#57b04a')); }
-        else B.blob(cx, base + 1.15 * small, cz, 0.6 * small, 0.65 * small, hexc('#3f9a4a'));
+        else B.blob(cx, base + 1.15 * small, cz, 0.6 * small, 0.65 * small, hexc(leaf));
+        if (season === 'snow' && !palm) B.blob(cx, base + (cedar ? 2.05 : 1.62) * small, cz, (cedar ? 0.3 : 0.42) * small, (cedar ? 0.45 : 0.18) * small, hexc('#f6f9fc'));
         const fruit = Object.keys(TREE).find(k => name.includes(k) && k !== 'Cedar' && k !== 'Palm');
-        if (fruit && small === 1) for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; B.box(cx + Math.cos(a) * 0.42 - 0.07, base + 1.05, cz + Math.sin(a) * 0.42 - 0.07, cx + Math.cos(a) * 0.42 + 0.07, base + 1.19, cz + Math.sin(a) * 0.42 + 0.07, hexc(TREE[fruit])); }
+        if (fruit && small === 1 && season !== 'bloom') for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; B.box(cx + Math.cos(a) * 0.42 - 0.07, base + 1.05, cz + Math.sin(a) * 0.42 - 0.07, cx + Math.cos(a) * 0.42 + 0.07, base + 1.19, cz + Math.sin(a) * 0.42 + 0.07, hexc(TREE[fruit])); }
       } else if (/Flowers/.test(cat)) {
         const col = (FLOWER.find(([w]) => name.includes(w)) || [0, '#f59ac0'])[1];
         B.box(cx - 0.03, base, cz - 0.03, cx + 0.03, base + 0.22, cz + 0.03, hexc('#4f9a3f'));
@@ -145,25 +191,33 @@
         const inset = 0.12; x0 += inset; z0 += inset; x1 -= inset; z1 -= inset;
         B.box(x0, base, z0, x1, base + hgt, z1, hexc(wallC));
         B.box((x0 + x1) / 2 - 0.25, base, z1 - 0.001, (x0 + x1) / 2 + 0.25, base + 0.75, z1 + 0.02, hexc('#7a4b2b'));   // door, facing south
+        // Windows either side of the door, lit after dark.
+        if (x1 - x0 > 1.2) B.lit(() => { for (const wx of [x0 + 0.18, x1 - 0.48]) B.box(wx, base + hgt * 0.45, z1 - 0.001, wx + 0.3, base + hgt * 0.45 + 0.3, z1 + 0.025, hexc('#f7e3a1')); });
         if (roofC) B.roof(x0 - 0.15, z0 - 0.15, x1 + 0.15, z1 + 0.15, base + hgt, Math.min(1.4, (x1 - x0) * 0.45), hexc(roofC));
       }
     }
-    return { P: new Float32Array(B.P), C: new Float32Array(B.C), kind, solid, what, ids, buildings };
+    return { P: new Float32Array(B.P), C: new Float32Array(B.C), G: new Float32Array(B.G), kind, solid, what, ids, buildings };
   }
 
   // ---------- the viewer: walk, or look from above ----------
+  const opt = { hour: -1, wx: -1, music: false };   // -1: follow the save
   function townView(s) {
     const W = Math.min(960, Math.max(320, (document.getElementById('content')?.clientWidth || 900) - 110)), H = Math.round(W * 0.58);
     const canvas = h('canvas', { class: 'town3d', tabindex: 0, width: W * 2, height: H * 2, style: { width: W + 'px', height: H + 'px' } });
     const gl = canvas.getContext('webgl', { antialias: true });
     if (!gl) return h('div', { class: 'room3d-empty' }, '3D needs WebGL, which this browser has turned off.');
-    const T = build(s);
+    const CAL = window.WW_CALENDAR, today = CAL.gameNow(s), season = seasonOf(today);
+    const T = build(s, season);
     const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x); return x; };
     const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
-    const buf = (data, name) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); const l = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 3, gl.FLOAT, false, 0, 0); };
-    buf(T.P, 'p'); buf(T.C, 'c');
-    const uM = gl.getUniformLocation(prog, 'm'), uFog = gl.getUniformLocation(prog, 'fog'), uFar = gl.getUniformLocation(prog, 'far');
-    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
+    const loc = { p: gl.getAttribLocation(prog, 'p'), c: gl.getAttribLocation(prog, 'c'), g: gl.getAttribLocation(prog, 'g') };
+    const mk = data => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); return b; };
+    const stat = { p: mk(T.P), c: mk(T.C), g: mk(T.G), n: T.P.length / 3 }, dyn = { p: gl.createBuffer(), c: gl.createBuffer(), g: gl.createBuffer(), n: 0 };
+    const bind = set => {
+      for (const [k, size] of [['p', 3], ['c', 3], ['g', 1]]) { gl.bindBuffer(gl.ARRAY_BUFFER, set[k]); gl.enableVertexAttribArray(loc[k]); gl.vertexAttribPointer(loc[k], size, gl.FLOAT, false, 0, 0); }
+    };
+    const uM = gl.getUniformLocation(prog, 'm'), uFog = gl.getUniformLocation(prog, 'fog'), uFar = gl.getUniformLocation(prog, 'far'), uLight = gl.getUniformLocation(prog, 'light'), uNight = gl.getUniformLocation(prog, 'night');
+    gl.enable(gl.DEPTH_TEST);
 
     // Start a few steps in front of the first resident's house (doors face south), else the town hall, else the middle,
     // on the nearest spot you can stand on.
@@ -174,25 +228,57 @@
     const me = { x: sx, z: sz, yaw: Math.PI, pitch: -0.1 }, sky = { on: false, yaw: 0.6, pitch: 0.95, dist: 60 };
     const keys = new Set(), info = h('div', { class: 'town3d-info' }), mode = h('button', { class: 'btn small' }, '🦅 Bird’s-eye');
     const free = (x, z) => x >= 0.3 && z >= 0.3 && x < N - 0.3 && z < N - 0.3 && !T.solid[Math.floor(z) * N + Math.floor(x)];
+    const pat = weatherPattern(s, today), snowy = season === 'snow' || season === 'winter';
+    const drops = [];   // rain or snow around the camera
+
+    // What the town looks like right now: the game clock (or a picked hour) and the save's weather (or a picked one).
+    function moment() {
+      const now = CAL.gameNow(s), hour = opt.hour >= 0 ? opt.hour + 0.5 : now.getHours() + now.getMinutes() / 60;
+      const lv = opt.wx >= 0 ? opt.wx : wxLevel(pat, Math.floor(hour) % 24);
+      return { hour, lv, wet: lv >= 3, snow: lv >= 3 && snowy, ...skyAt(hour, lv, snowy) };
+    }
+    function particles(M, dt, center, r) {
+      const want = M.wet ? (M.lv === 4 ? 900 : 550) * (sky.on ? 1.6 : 1) : 0;
+      while (drops.length < want) drops.push({ x: center[0] + (Math.random() * 2 - 1) * r, y: Math.random() * 9, z: center[1] + (Math.random() * 2 - 1) * r, k: Math.random() * 6 });
+      drops.length = Math.min(drops.length, want);
+      for (const d of drops) {
+        d.y -= dt * (M.snow ? 1.3 : 13); if (M.snow) { d.x += Math.sin(d.k + d.y) * dt * 0.4; }
+        if (d.y < 0 || Math.abs(d.x - center[0]) > r || Math.abs(d.z - center[1]) > r || (!sky.on && Math.hypot(d.x - center[0], d.z - center[1]) < 0.8)) { d.x = center[0] + (Math.random() * 2 - 1) * r; d.z = center[1] + (Math.random() * 2 - 1) * r; d.y = 6 + Math.random() * 3; }
+      }
+    }
+    function dynamic(M) {
+      const B = builder();
+      const rc = hexc('#c9d6ee'), sc = hexc('#ffffff');
+      for (const d of drops) {
+        if (M.snow) { const r = sky.on ? 0.12 : 0.025; B.box(d.x - r, d.y - r, d.z - r, d.x + r, d.y + r, d.z + r, sc); }
+        else { B.quad([d.x - 0.012, d.y, d.z], [d.x + 0.012, d.y, d.z], [d.x + 0.012, d.y + 0.45, d.z], [d.x - 0.012, d.y + 0.45, d.z], rc); B.quad([d.x, d.y, d.z - 0.012], [d.x, d.y, d.z + 0.012], [d.x, d.y + 0.45, d.z + 0.012], [d.x, d.y + 0.45, d.z - 0.012], rc); }
+      }
+      for (const [k, arr] of [['p', B.P], ['c', B.C], ['g', B.G]]) { gl.bindBuffer(gl.ARRAY_BUFFER, dyn[k]); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.DYNAMIC_DRAW); }
+      dyn.n = B.P.length / 3;
+    }
     function frame() {
-      const fogC = [0.62, 0.84, 0.98];
-      gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(...fogC, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      const M = moment();
+      gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(...M.fog, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       let eye, at, far;
       if (sky.on) { const cx = 32, cz = 32; eye = [cx + Math.sin(sky.yaw) * Math.cos(sky.pitch) * sky.dist, Math.sin(sky.pitch) * sky.dist, cz + Math.cos(sky.yaw) * Math.cos(sky.pitch) * sky.dist]; at = [cx, 0, cz]; far = 220; }
-      else { eye = [me.x, 1.25, me.z]; at = [me.x + Math.sin(me.yaw) * Math.cos(me.pitch), 1.25 + Math.sin(me.pitch), me.z + Math.cos(me.yaw) * Math.cos(me.pitch)]; far = 34; }
+      else { eye = [me.x, 1.25, me.z]; at = [me.x + Math.sin(me.yaw) * Math.cos(me.pitch), 1.25 + Math.sin(me.pitch), me.z + Math.cos(me.yaw) * Math.cos(me.pitch)]; far = M.wet ? 26 : 34; }
       gl.uniformMatrix4fv(uM, false, mul(persp(1.0, W / H, 0.1, 400), look(eye, at)));
-      gl.uniform3fv(uFog, fogC); gl.uniform1f(uFar, far);
-      gl.drawArrays(gl.TRIANGLES, 0, T.P.length / 3);
+      gl.uniform3fv(uFog, M.fog); gl.uniform3fv(uLight, M.light); gl.uniform1f(uNight, M.night); gl.uniform1f(uFar, far);
+      bind(stat); gl.drawArrays(gl.TRIANGLES, 0, stat.n);
+      dynamic(M); if (dyn.n) { bind(dyn); gl.drawArrays(gl.TRIANGLES, 0, dyn.n); }
+      const clock = `${Math.floor(M.hour) % 12 || 12} ${Math.floor(M.hour) % 24 < 12 ? 'AM' : 'PM'} · ${M.snow ? 'Snow' : WX_WORD[M.lv]}`;
       if (!sky.on) {
         const ax = Math.floor(me.x + Math.sin(me.yaw) * 1.1), az = Math.floor(me.z + Math.cos(me.yaw) * 1.1);
         const there = ax >= 0 && az >= 0 && ax < N && az < N ? T.what[az * N + ax] : '';
-        info.textContent = there ? `In front of you: ${there}` : 'Arrow keys or WASD to walk · drag to look around';
-      } else info.textContent = 'Drag to turn the town · scroll to zoom';
+        info.textContent = `${clock} · ${there ? `In front of you: ${there}` : 'Arrow keys or WASD to walk · drag to look around'}`;
+      } else info.textContent = `${clock} · Drag to turn the town · scroll to zoom`;
+      return M;
     }
     let raf = 0, last = 0;
+    const lively = () => moment().wet;
     function loop(t) {
       raf = 0;
-      if (!canvas.isConnected) return;
+      if (!canvas.isConnected) { stopMusic(); return; }
       const dt = Math.min(0.05, (t - (last || t)) / 1000); last = t;
       if (!sky.on && keys.size) {
         const fwd = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
@@ -202,8 +288,10 @@
         if (free(nx, me.z)) me.x = nx;
         if (free(me.x, nz)) me.z = nz;
       }
+      const M = moment();
+      particles(M, dt, sky.on ? [32, 32] : [me.x, me.z], sky.on ? 34 : 9);
       frame();
-      if (keys.size) { raf = requestAnimationFrame(loop); } else last = 0;
+      if (keys.size || lively()) raf = requestAnimationFrame(loop); else last = 0;
     }
     const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
     canvas.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { e.preventDefault(); keys.add(k); kick(); } });
@@ -220,17 +308,40 @@
     });
     canvas.addEventListener('pointerup', () => { drag = null; });
     canvas.addEventListener('wheel', e => { if (!sky.on) return; e.preventDefault(); sky.dist = Math.max(20, Math.min(120, sky.dist * (e.deltaY > 0 ? 1.1 : 0.9))); frame(); }, { passive: false });
-    mode.onclick = () => { sky.on = !sky.on; mode.textContent = sky.on ? '🚶 Walk' : '🦅 Bird’s-eye'; sfx.click(); frame(); canvas.focus(); };
-    frame();
+    mode.onclick = () => { sky.on = !sky.on; drops.length = 0; mode.textContent = sky.on ? '🚶 Walk' : '🦅 Bird’s-eye'; sfx.click(); frame(); kick(); canvas.focus(); };
+
+    // The hourly music of the game clock (SDAT sequence 0x16 + hour, as on Today in Town), from the player's ROM.
+    const canPlay = window.GameSound && GameSound.ready();
+    let tune = { tok: 0, hour: -1, timer: null };
+    function playMusic() {
+      const hr = Math.floor(moment().hour) % 24, tok = ++tune.tok; tune.hour = hr;
+      const r = GameSound.playMusic(0x16 + hr, { onEnd: () => { if (opt.music && tok === tune.tok && canvas.isConnected) setTimeout(() => opt.music && tok === tune.tok && playMusic(), 400); } });
+      if (!r) { opt.music = false; music.classList.remove('on'); toast('The music couldn’t be played', '🎵'); return; }
+      clearInterval(tune.timer);
+      tune.timer = setInterval(() => { if (!canvas.isConnected) { stopMusic(); return; } if (opt.music && Math.floor(moment().hour) % 24 !== tune.hour) playMusic(); }, 15000);
+    }
+    function stopMusic() { tune.tok++; clearInterval(tune.timer); if (opt.music && window.GameSound) GameSound.stopMusic(); }
+    const music = h('button', { class: 'btn small' + (opt.music ? ' on' : ''), title: canPlay ? 'Play the hour’s music' : 'Open your ROM on the Welcome screen to hear the town’s music', disabled: !canPlay }, '🎵 Music');
+    music.onclick = () => { opt.music = !opt.music; music.classList.toggle('on', opt.music); sfx.click(); if (opt.music) playMusic(); else { GameSound.stopMusic(); tune.tok++; clearInterval(tune.timer); } };
+    if (opt.music && canPlay) setTimeout(playMusic, 0);
+
+    const hours = [[-1, '🕰️ Game clock'], ...[...Array(24).keys()].map(x => [x, `${x % 12 || 12} ${x < 12 ? 'AM' : 'PM'}`])];
+    const hourSel = UI.selectInput(hours, () => opt.hour, v => { opt.hour = v; frame(); kick(); }, { width: 'w-m' });
+    const wxSel = UI.selectInput([[-1, pat === null ? '⛅ Save (not rolled)' : '⛅ Save’s weather'], [0, '☀️ Clear'], [2, '☁️ Cloudy'], [3, snowy ? '❄️ Snow' : '🌧️ Rain'], [4, snowy ? '❄️ Heavy snow' : '⛈️ Heavy rain']], () => opt.wx, v => { opt.wx = v; drops.length = 0; frame(); kick(); }, { width: 'w-m' });
+    const photo = Postcard.button(() => { frame(); return canvas; }, () => `${sky.on ? 'Above' : 'Walking in'} ${s.str(4, 8)}`, `${s.str(4, 8)} postcard`);
+    frame(); kick();
+    const SEASON_WORD = { spring: 'Spring', bloom: 'Cherry blossoms', summer: 'Summer', fall: 'Autumn', winter: 'Winter', snow: 'Snow on the ground' };
     return h('div', { class: 'card pad town3d-card' },
       h('div', { class: 'town3d-bar' }, info, h('span', { class: 'spacer' }), mode),
       canvas,
-      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Every tree, flower, rock and building is where your save has it. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
+      h('div', { class: 'town3d-bar town3d-tools' }, hourSel, wxSel, music, photo, h('span', { class: 'spacer' }),
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, SEASON_WORD[season])),
+      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Every tree, flower, rock and building is where your save has it, lit by the game clock with the weather the game rolled for today. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
   }
 
   VIEWS.push({
     id: 'town3d', group: 'Town', icon: '🚶', title: () => 'Walk Around Town', sub: s => `${s.str(4, 8)} in 3D`,
-    tips: ['Click the town, then use the arrow keys or WASD to walk. Drag to look around.', 'Bird’s-eye shows the whole town; drag to turn it and scroll to zoom.'],
+    tips: ['Click the town, then use the arrow keys or WASD to walk. Drag to look around.', 'Bird’s-eye shows the whole town; drag to turn it and scroll to zoom.', 'The light follows the game clock and the weather is the one the game rolled for today. Pick another hour or weather to see the town differently, then 📷 for a postcard.'],
     render(s) { return [townView(s)]; },
   });
 })();

@@ -263,7 +263,11 @@
   const VS = 'attribute vec3 p;attribute vec2 uv;attribute vec3 c;uniform mat4 mvp;varying vec2 vuv;varying vec3 vc;void main(){gl_Position=mvp*vec4(p,1.0);vuv=uv;vc=c;}';
   const FS = 'precision mediump float;varying vec2 vuv;varying vec3 vc;uniform sampler2D tex;uniform float has;void main(){vec4 t=has>0.5?texture2D(tex,vuv):vec4(1.0);if(t.a<0.5)discard;gl_FragColor=vec4(t.rgb*vc,1.0);}';
 
-  function viewer(groups, { size = 220, yaw = 0.35, spin = true, pitch: pitch0 = 0.12, zoom = 1.7 } = {}) {
+  // opts.view ({ angle, pitch }) is kept up to date so a rebuilt viewer can keep the same angle; opts.frame ({ min, max })
+  // fixes what the camera centers on. With opts.grab(e) returning { move(e), up(e) } the viewer hands that drag over
+  // instead of turning; opts.click(e) gets plain clicks. canvas.pick(x, y, h) is the world (x, z) under a page point at
+  // height h, canvas.update(groups) swaps the geometry in place, and canvas.draw() renders now.
+  function viewer(groups, { size = 220, yaw = 0.35, spin = true, pitch: pitch0 = 0.12, zoom = 1.7, view = null, frame = null, grab = null, click = null } = {}) {
     const canvas = document.createElement('canvas');
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = size * dpr; canvas.height = size * dpr; canvas.style.width = canvas.style.height = size + 'px';
@@ -272,28 +276,40 @@
     if (!gl) return null;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
     const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
-    let min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
-    const parts = groups.map(g => {
-      const data = new Float32Array(g.verts.length * 8);
-      g.verts.forEach((v, i) => {
-        for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], v[k]); max[k] = Math.max(max[k], v[k]); }
-        data.set([v[0], v[1], v[2], v[3] / g.tw, v[4] / g.th, v[5], v[6], v[7]], i * 8);
+    let min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9], parts = [];
+    const texCache = new Map();
+    function upload(list) {
+      for (const part of parts) gl.deleteBuffer(part.buf);
+      parts = list.map(g => {
+        const data = new Float32Array(g.verts.length * 8);
+        g.verts.forEach((v, i) => {
+          if (!frame) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], v[k]); max[k] = Math.max(max[k], v[k]); }
+          data.set([v[0], v[1], v[2], v[3] / g.tw, v[4] / g.th, v[5], v[6], v[7]], i * 8);
+        });
+        const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        let tex = null;
+        if (g.tex) {
+          const key = g.tex.px.buffer, wrapKey = `${g.repS}${g.flipS}${g.repT}${g.flipT}`;
+          tex = texCache.get(key) && texCache.get(key)[wrapKey];
+          if (!tex) {
+            tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, g.tex.w, g.tex.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(g.tex.px.buffer));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            const wrap = (rep, flip) => rep ? (flip ? gl.MIRRORED_REPEAT : gl.REPEAT) : gl.CLAMP_TO_EDGE;
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap(g.repS, g.flipS)); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap(g.repT, g.flipT));
+            texCache.set(key, { ...(texCache.get(key) || {}), [wrapKey]: tex });
+          }
+        }
+        return { buf, tex, n: g.verts.length };
       });
-      const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-      let tex = null;
-      if (g.tex) {
-        tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, g.tex.w, g.tex.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(g.tex.px.buffer));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const wrap = (rep, flip) => rep ? (flip ? gl.MIRRORED_REPEAT : gl.REPEAT) : gl.CLAMP_TO_EDGE;
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap(g.repS, g.flipS)); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap(g.repT, g.flipT));
-      }
-      return { buf, tex, n: g.verts.length };
-    });
+    }
+    if (frame) { min = frame.min; max = frame.max; }
+    upload(groups);
     const ctr = [0, 1, 2].map(k => (min[k] + max[k]) / 2), ext = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
     const loc = { p: gl.getAttribLocation(prog, 'p'), uv: gl.getAttribLocation(prog, 'uv'), c: gl.getAttribLocation(prog, 'c'), mvp: gl.getUniformLocation(prog, 'mvp'), has: gl.getUniformLocation(prog, 'has') };
     gl.enable(gl.DEPTH_TEST);
-    let angle = yaw, pitch = pitch0, dragging = null, raf = 0;
+    let angle = view && view.angle !== undefined ? view.angle : yaw, pitch = view && view.pitch !== undefined ? view.pitch : pitch0, dragging = null, raf = 0, M = null;
+    const mm = (a, b) => { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let v = 0; for (let k = 0; k < 4; k++) v += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = v; } return o; };
     function draw() {
       gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const s = zoom / ext, ca = Math.cos(angle), sa = Math.sin(angle), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -302,8 +318,8 @@
       const Ry = [ca, 0, -sa, 0, 0, 1, 0, 0, sa, 0, ca, 0, 0, 0, 0, 1];
       const Rx = [1, 0, 0, 0, 0, cp, sp, 0, 0, -sp, cp, 0, 0, 0, 0, 1];
       const S = [s, 0, 0, 0, 0, s, 0, 0, 0, 0, -s * 0.5, 0, 0, 0, 0, 1];
-      const mm = (a, b) => { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let v = 0; for (let k = 0; k < 4; k++) v += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = v; } return o; };
-      gl.uniformMatrix4fv(loc.mvp, false, new Float32Array(mm(S, mm(Rx, mm(Ry, T)))));
+      M = mm(S, mm(Rx, mm(Ry, T)));
+      gl.uniformMatrix4fv(loc.mvp, false, new Float32Array(M));
       for (const part of parts) {
         gl.bindBuffer(gl.ARRAY_BUFFER, part.buf);
         gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 32, 0);
@@ -312,12 +328,35 @@
         gl.uniform1f(loc.has, part.tex ? 1 : 0); if (part.tex) gl.bindTexture(gl.TEXTURE_2D, part.tex);
         gl.drawArrays(gl.TRIANGLES, 0, part.n);
       }
+      if (view) { view.angle = angle; view.pitch = pitch; }
     }
+    // The projection has no perspective, so a page point at a known height maps back to one (x, z).
+    canvas.pick = (px, py, hgt = 0) => {
+      if (!M) draw();
+      const r = canvas.getBoundingClientRect(), nx = (px - r.left) / r.width * 2 - 1, ny = 1 - (py - r.top) / r.height * 2;
+      const a = M[0], b = M[8], c = M[1], d = M[9], ex = nx - M[4] * hgt - M[12], ey = ny - M[5] * hgt - M[13], det = a * d - b * c;
+      return Math.abs(det) < 1e-9 ? null : [(ex * d - b * ey) / det, (a * ey - c * ex) / det];
+    };
+    canvas.update = list => { upload(list); draw(); };
+    canvas.draw = draw;
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     function tick() { if (!canvas.isConnected) return; if (!dragging && spin && !reduce) angle += 0.006; draw(); raf = requestAnimationFrame(tick); }
-    canvas.addEventListener('pointerdown', e => { dragging = [e.clientX, e.clientY, angle, pitch]; canvas.setPointerCapture(e.pointerId); });
-    canvas.addEventListener('pointermove', e => { if (!dragging) return; angle = dragging[2] + (e.clientX - dragging[0]) * 0.012; pitch = Math.max(-0.6, Math.min(1.2, dragging[3] + (e.clientY - dragging[1]) * 0.008)); if (reduce || !spin) draw(); });
-    canvas.addEventListener('pointerup', () => { dragging = null; });
+    let handed = null, down = null;
+    canvas.addEventListener('pointerdown', e => {
+      down = [e.clientX, e.clientY]; try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+      handed = grab ? grab(e) : null;
+      if (!handed) dragging = [e.clientX, e.clientY, angle, pitch];
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (handed) { handed.move(e); return; }
+      if (!dragging) return; angle = dragging[2] + (e.clientX - dragging[0]) * 0.012; pitch = Math.max(-0.6, Math.min(1.2, dragging[3] + (e.clientY - dragging[1]) * 0.008)); if (reduce || !spin) draw();
+    });
+    canvas.addEventListener('pointerup', e => {
+      const still = down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5;
+      if (handed) { const hnd = handed; handed = null; hnd.up(e, still); }
+      else if (still && click) click(e);
+      dragging = null; down = null;
+    });
     draw();
     requestAnimationFrame(() => { if (canvas.isConnected) tick(); else setTimeout(() => canvas.isConnected && tick(), 300); });
     void raf;

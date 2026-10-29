@@ -94,5 +94,18 @@
     return { groups, missing };
   }
 
-  window.Room3D = { scene, piece };
+  // The tiles a piece covers, as [dx, dy] from its anchor (by shape and the direction in its id's low two bits), and how
+  // tall it is in room units (where items placed on top of it sit). Without the ROM, one tile.
+  function footprint(id) {
+    if (id < 0x3000 || id >= 0x5000 || !window.ROM || !ROM.ready) return [[0, 0]];
+    const a = ROM.file('ftr_info/always.bin'); if (!a) return [[0, 0]];
+    const n = Math.min((id - 0x3000) >> 2, 0x6E8), shape = a[n * 8 + 5] || 0;
+    return FOOT[shape] ? FOOT[shape][id & 3] : [[0, 0]];
+  }
+  function height(id) {
+    if (id < 0x3000 || id >= 0x5000 || !window.ROM || !ROM.ready) return 1;
+    const d = ROM.file('ftr_info/dma.bin'); if (!d) return 1;
+    return d[Math.min((id - 0x3000) >> 2, 0x6E8) * 0x1C + 3] / 16;
+  }
+  window.Room3D = { scene, piece, footprint, height, TILE };
 })();

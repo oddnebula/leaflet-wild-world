@@ -130,7 +130,9 @@
               const id = s.u16(b + 0x6AC + k * 2); return id === 0xFFF1 ? id : (id & ~3) | (facing[k] || 0);
             } });
             const cv = sc && Model3D.viewer(sc.groups, { size: Math.min(560, Math.max(300, (document.getElementById('content')?.clientWidth || 640) - 90)), yaw: 0, spin: false, pitch: 0.75, zoom: 1.35 });
-            room = cv ? h('div', { class: 'room3d' }, cv, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Drag to look around. Switch 3D off to swap furniture.')) : view;
+            const who = byId.get(id)?.name || 'A neighbor';
+            room = cv ? h('div', { class: 'room3d' }, cv, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Drag to look around. Switch 3D off to swap furniture.'),
+              h('div', { class: 'btn-row', style: { justifyContent: 'center', marginTop: '8px' } }, Postcard.button(() => { cv.draw(); return cv; }, `${who}’s house in ${s.str(4, 8)}`, `${who}'s house`))) : view;
           }
           const toggle3d = layout ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, '3D view', UI.switchInput(() => !!show3d[v], q => { show3d[v] = q; refresh(); })) : null;
           return [

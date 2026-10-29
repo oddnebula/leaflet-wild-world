@@ -56,10 +56,14 @@ Card, the Pattern studio (layers, mirror, picture import), the Save Doctor, grou
 turnip advisor, the Completion score, the letter Game view, the 2D room editor, and EU saves.
 
 **Chunk A: the town alive**
-- [ ] Living 3D town: the save's clock lights it, seasons color the ground, today's weather from the save (rain, snow), the
-  neighbors outside today (the outdoor list at 0xC258) walking about, the hourly music playing.
-- [ ] Arrange furniture in 3D: drag, rotate and stack in the 3D room, written straight back to the save.
-- [ ] Photo mode for every 3D view (town, rooms, sky), saved as postcards.
+- [x] Living 3D town: the game clock lights it (windows glow at night), the season colors it (snow, autumn leaves, April
+  blossom), today's rolled weather brings clouds, rain or snow, any hour or weather can be previewed, and the hourly music
+  plays. (Neighbors walking about was tried and left out.)
+- [x] Arrange furniture in 3D: drag, nudge, turn and put away pieces in the 3D room, each with its whole footprint (the
+  2D editor now moves footprints too when the ROM is open).
+- [x] Photo mode: postcards from the 3D town, house rooms, neighbors' rooms and Celeste's sky.
+- [ ] The town with the game's own models from the player's ROM: acre ground (bg/a*), trees by season, flowers, weeds,
+  rocks (fg/).
 
 **Chunk B: for planners and completionists**
 - [ ] Town planner: paint trees, flowers and paths over the map with each acre's perfect-town status updating live.

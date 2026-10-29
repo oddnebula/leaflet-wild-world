@@ -55,15 +55,111 @@
           h('button', { class: 'btn small', style: { marginTop: '6px' }, onclick: () => rot(o2) }, '↻ Rotate')))));
   }
 
-  // The room in 3D with the game's own furniture, wallpaper and flooring from the player's ROM (js/room3d.js).
-  function view3d(s, r, area) {
+  // ---------- moving a piece with its whole footprint ----------
+  // A piece's own tile holds its id; the other tiles it covers hold 0xF031 ("part of a larger piece"). Items on top ride
+  // along, and so does its switch (a lamp left on stays on). Footprints come from the ROM's furniture info.
+  const OCC = 0xF031, EMPTY = 0xFFF1, isFtr = id => id >= 0x3000 && id < 0x5000, at = (x, y) => y * 16 + x;
+  const cellsOf = (id, x, y) => window.Room3D.footprint(id).map(([dx, dy]) => [x + dx, y + dy]);
+  const exact = () => !!(window.ROM && ROM.ready && ROM.file('ftr_info/always.bin'));
+  // Which piece covers each tile: at(x, y) -> its anchor [x, y].
+  function owners(s, r) {
+    const own = new Map();
+    for (let k = 0; k < 256; k++) { const id = s.u16(r + k * 2); if (isFtr(id)) for (const [x, y] of cellsOf(id, k & 15, k >> 4)) if (x >= 0 && y >= 0 && x < 16 && y < 16) own.set(at(x, y), [k & 15, k >> 4]); }
+    return own;
+  }
+  function fits(s, r, area, from, to, nid) {
+    const mine = from ? new Set(cellsOf(s.u16(r + at(...from) * 2), ...from).map(c => at(...c))) : new Set();
+    return cellsOf(nid, ...to).every(([x, y]) => x >= area.x && y >= area.y && x < area.x + area.w && y < area.y + area.h && (mine.has(at(x, y)) || s.u16(r + at(x, y) * 2) === EMPTY));
+  }
+  // Moves (or with copy, copies) the piece anchored at `from` to `to`, optionally as a new id (turning it). False if it
+  // doesn't fit there.
+  function movePiece(s, r, area, from, to, newId, copy) {
+    const fk = at(...from), id = s.u16(r + fk * 2); if (!isFtr(id)) return false;
+    const nid = newId ?? id, old = cellsOf(id, ...from).filter(([x, y]) => x >= 0 && y >= 0 && x < 16 && y < 16);
+    if (!fits(s, r, area, copy ? null : from, to, nid)) return false;
+    const tops = old.map(c => s.u16(r + 0x200 + at(...c) * 2)), sw = s.bit(r + 0x400, fk);
+    if (!copy) for (const c of old) { const k = at(...c); if (k === fk || s.u16(r + k * 2) === OCC) s.set16(r + k * 2, EMPTY); s.set16(r + 0x200 + k * 2, EMPTY); }
+    cellsOf(nid, ...to).forEach((c, i) => { s.set16(r + at(...c) * 2, i ? OCC : nid); if (!copy) s.set16(r + 0x200 + at(...c) * 2, tops[i] ?? EMPTY); });
+    if (!copy && fk !== at(...to)) { s.setBit(r + 0x400, at(...to), sw); s.setBit(r + 0x400, fk, true); }
+    return true;
+  }
+  function removePiece(s, r, from) {
+    const id = s.u16(r + at(...from) * 2); if (!isFtr(id)) return;
+    for (const c of cellsOf(id, ...from)) { const k = at(...c); if (k < 0 || k > 255) continue; if (k === at(...from) || s.u16(r + k * 2) === OCC) s.set16(r + k * 2, EMPTY); s.set16(r + 0x200 + k * 2, EMPTY); }
+  }
+  const turned = id => (id & 0xFFFC) | ((id + 1) & 3);
+
+  // The room in 3D with the game's own furniture, wallpaper and flooring from the player's ROM (js/room3d.js). Drag a
+  // piece to move it (it snaps to the floor tiles, green where it fits), click one to pick it, then click a free spot,
+  // use the arrow keys, R to turn it or Delete to put it away. Dragging anywhere else turns the room.
+  const view3 = { angle: 0, pitch: 0.75 };
+  let sel = null, refocus = false;
+  function view3d(s, r, area, refresh, title) {
     const need = msg => h('div', { class: 'room3d-empty' }, h('span', { class: 'em' }, '🪑'), msg);
     if (!window.ROM || !ROM.ready) return need('Open your Wild World ROM on the Welcome screen to see this room in 3D with the game’s own furniture.');
-    const sc = window.Room3D.scene({ area, wall: s.u16(r + 0x448), floor: s.u16(r + 0x44A), items: (x, y, L) => s.u16(r + L * 0x200 + (y * 16 + x) * 2) });
+    const TILE = window.Room3D.TILE;
+    const build = () => window.Room3D.scene({ area, wall: s.u16(r + 0x448), floor: s.u16(r + 0x44A), items: (x, y, L) => s.u16(r + L * 0x200 + at(x, y) * 2) });
+    const sc = build();
     if (!sc) return need('Your saved game art is from an older Leaflet. Open the ROM again on the Welcome screen to add the furniture models.');
-    const cv = window.Model3D.viewer(sc.groups, { size: Math.min(620, Math.max(320, (document.getElementById('content')?.clientWidth || 700) - 80)), yaw: 0, spin: false, pitch: 0.75, zoom: 1.55 });
-    return h('div', { class: 'room3d' }, cv || need('3D needs WebGL, which this browser has turned off.'),
-      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Drag to look around. Switch 3D off to move furniture.', sc.missing.length ? ` ${sc.missing.length} piece${sc.missing.length === 1 ? ' has' : 's have'} no model.` : ''));
+    if (sel && !isFtr(s.u16(r + at(...sel) * 2))) sel = null;
+    // Flat coloured tiles just above the floor: the picked piece, and where a dragged one would land.
+    const mark = (cells, rgb) => cells.map(([x, y]) => {
+      const x0 = x * TILE - 0.08, x1 = (x + 1) * TILE + 0.08, z0 = y * TILE - 0.08, z1 = (y + 1) * TILE + 0.08, v = (px, pz) => [px, 0.05, pz, 0, 0, ...rgb];
+      return { verts: [v(x0, z1), v(x1, z1), v(x1, z0), v(x0, z1), v(x1, z0), v(x0, z0)], tex: null, tw: 1, th: 1 };
+    });
+    const marks = ghost => [
+      ...(sel ? mark(cellsOf(s.u16(r + at(...sel) * 2), ...sel), [1, 0.84, 0.3]) : []),
+      ...(ghost ? mark(cellsOf(ghost.id, ...ghost.to), ghost.ok ? [0.45, 0.85, 0.45] : [0.95, 0.45, 0.4]) : []),
+    ];
+    let own = owners(s, r);
+    const floorTile = e => { const p = cv.pick(e.clientX, e.clientY, 0); return p && [Math.floor(p[0] / TILE), Math.floor(p[1] / TILE)]; };
+    // Under the pointer: the piece whose top or side is there (trying heights from the top down), else the floor tile.
+    function hit(e) {
+      for (const hy of [4, 3, 2.2, 1.4, 0.7]) {
+        const p = cv.pick(e.clientX, e.clientY, hy); if (!p) continue;
+        const tx = Math.floor(p[0] / TILE), ty = Math.floor(p[1] / TILE), o = own.get(at(tx, ty));
+        if (o && window.Room3D.height(s.u16(r + at(...o) * 2)) * TILE / 2 >= hy - 0.4) return { tile: [tx, ty], owner: o };
+      }
+      const t = floorTile(e); return t ? { tile: t, owner: own.get(at(...t)) || null } : null;
+    }
+    const commit = (ok, msg) => { if (ok) { sfx.bell(); refocus = true; refresh(); } else { sfx.error(); toast(msg || 'It doesn’t fit there', '🪑'); } };
+    const moveSel = to => { if (!sel || (to[0] === sel[0] && to[1] === sel[1])) return; const ok = movePiece(s, r, area, sel, to); if (ok) sel = to; commit(ok); };
+    const cv = window.Model3D.viewer(sc.groups.concat(marks()), {
+      size: Math.min(620, Math.max(320, (document.getElementById('content')?.clientWidth || 700) - 80)), spin: false, zoom: 1.55, view: view3,
+      frame: { min: [area.x * TILE, 0, area.y * TILE], max: [(area.x + area.w) * TILE, 5, (area.y + area.h) * TILE] },
+      grab: e => {
+        cv.focus();
+        const k = hit(e); if (!k || !k.owner) return null;
+        sel = k.owner; const id = s.u16(r + at(...sel) * 2), off = [k.tile[0] - sel[0], k.tile[1] - sel[1]];
+        cv.update(sc.groups.concat(marks())); info.textContent = label();
+        let to = sel;
+        return {
+          move(ev) { const t = floorTile(ev); if (!t) return; const nt = [t[0] - off[0], t[1] - off[1]]; if (nt[0] === to[0] && nt[1] === to[1]) return; to = nt; cv.update(sc.groups.concat(marks({ id, to, ok: fits(s, r, area, sel, to, id) }))); },
+          up(ev, still) { if (still) { sfx.pop(); info.textContent = label(); return; } if (to[0] === sel[0] && to[1] === sel[1]) { cv.update(sc.groups.concat(marks())); return; } moveSel(to); if (!fits(s, r, area, sel, sel, id)) cv.update(sc.groups.concat(marks())); },
+        };
+      },
+      click: e => { const k = hit(e); if (sel && k && !k.owner) moveSel(k.tile); else if (sel) { sel = null; cv.update(sc.groups.concat(marks())); info.textContent = label(); } },
+    });
+    if (!cv) return need('3D needs WebGL, which this browser has turned off.');
+    cv.tabIndex = 0; cv.classList.add('room3d-canvas');
+    const label = () => sel ? `Picked: ${item(s.u16(r + at(...sel) * 2)).name} · drag it, click a free spot, arrow keys to nudge, R to turn, Delete to put away` : 'Drag a piece to move it · click one to pick it · drag the floor to look around';
+    const info = h('div', { class: 'muted room3d-info' }, label());
+    const turn = () => { if (!sel) return; const id = s.u16(r + at(...sel) * 2); commit(movePiece(s, r, area, sel, sel, turned(id)), 'There’s no room to turn it'); };
+    const remove = () => { if (!sel) return; const nm = item(s.u16(r + at(...sel) * 2)).name; removePiece(s, r, sel); sel = null; sfx.toggle(false); toast(`Put away the ${nm} (⌘Z to undo)`, '🪑'); refocus = true; refresh(); };
+    cv.addEventListener('keydown', e => {
+      const k = e.key, d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[k];
+      if (d && sel) { e.preventDefault(); moveSel([sel[0] + d[0], sel[1] + d[1]]); }
+      else if ((k === 'r' || k === 'R') && sel) { e.preventDefault(); turn(); }
+      else if ((k === 'Delete' || k === 'Backspace') && sel) { e.preventDefault(); remove(); }
+      else if (k === 'Escape' && sel) { sel = null; cv.update(sc.groups.concat(marks())); info.textContent = label(); }
+    });
+    if (refocus) { refocus = false; setTimeout(() => cv.isConnected && cv.focus(), 0); }
+    return h('div', { class: 'room3d' }, cv, info,
+      h('div', { class: 'btn-row', style: { justifyContent: 'center', marginTop: '8px' } },
+        h('button', { class: 'btn small', disabled: !sel, onclick: turn }, '↻ Turn'),
+        h('button', { class: 'btn small', disabled: !sel, onclick: remove }, '🗑 Put away'),
+        Postcard.button(() => { cv.draw(); return cv; }, `${title} at home in ${s.str(4, 8)}`, `${s.str(4, 8)} ${title}`)),
+      sc.missing.length ? h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, `${sc.missing.length} piece${sc.missing.length === 1 ? ' has' : 's have'} no model in the ROM and isn’t shown.`) : null);
   }
 
   VIEWS.push({
@@ -83,13 +179,19 @@
         onCell: (x, y, e, ctx) => {
           const o = r + (y * 16 + x) * 2, id = s.u16(o);
           if (ctx) {
-            if (id >= 0x3000 && id < 0x5000) s.set16(o, (id & 0xFFFC) | ((id + 1) & 3)); else { s.set16(o, 0xFFF1); s.set16(o + 0x200, 0xFFF1); }
+            if (isFtr(id) && exact()) { if (!movePiece(s, r, area, [x, y], [x, y], turned(id))) { sfx.error(); toast('There’s no room to turn it', '🪑'); return; } }
+            else if (isFtr(id)) s.set16(o, turned(id)); else { s.set16(o, 0xFFF1); s.set16(o + 0x200, 0xFFF1); }
             sfx.click(); refresh(); return;
           }
           sfx.pop(); editSpot(s, r, x, y, refresh);
         },
         onMove: ([fx, fy], [tx, ty], copy) => {
           if (fx === tx && fy === ty) return;
+          // With the ROM, a piece moves with every tile it covers; without it, the two spots swap as before.
+          if (isFtr(s.u16(r + at(fx, fy) * 2)) && exact()) {
+            if (movePiece(s, r, area, [fx, fy], [tx, ty], undefined, copy)) { sfx.bell(); refresh(); } else { sfx.error(); toast('It doesn’t fit there', '🪑'); }
+            return;
+          }
           for (const L of [0, 0x200]) {
             const a = r + L + (fy * 16 + fx) * 2, b = r + L + (ty * 16 + tx) * 2;
             const va = s.u16(a), vb = s.u16(b);
@@ -121,11 +223,11 @@
         section('Rooms', built ? `${count} pieces in the ${ROOMS[room].toLowerCase()}` : 'Not built yet'), roomTabs,
         h('div', { class: 'card pad' },
           h('div', { class: 'btn-row', style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
-            h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Click a spot to edit it · drag to move · right-click to spin or clear'),
+            h('span', { class: 'muted', style: { fontSize: '12px' } }, show3d ? 'Arrange in 3D: drag furniture to move it, or pick a piece and use the arrow keys' : 'Click a spot to edit it · drag to move · right-click to spin or clear'),
             h('span', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
               h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, '3D view', switchInput(() => show3d, v => { show3d = v; refresh(); })),
               show3d ? null : h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, 'Show outside the walls', switchInput(() => showOutside, v => { showOutside = v; refresh(); })))),
-          show3d ? view3d(s, r, area) : view,
+          show3d ? view3d(s, r, area, refresh, ROOMS[room]) : view,
           !built ? h('div', { class: 'callout', style: { marginTop: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'This room isn’t built yet'), 'Furniture placed here only shows up after the matching upgrade. Changing the house size by hand without the upgrade can leave furniture stuck inside walls.')) : null,
           showOutside ? h('div', { class: 'callout', style: { marginTop: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'Outside the walls'), 'Spots outside the room are normally empty. Furniture placed there may be unreachable or invisible.')) : null),
         card(

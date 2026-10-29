@@ -213,7 +213,7 @@
     cv.addEventListener('pointermove', e => { if (!drag) return; yaw = drag[2] - (e.clientX - drag[0]) * 0.006; pitch = Math.max(0.05, Math.min(1.3, drag[3] + (e.clientY - drag[1]) * 0.005)); draw(); });
     cv.addEventListener('pointerup', () => { drag = null; });
     draw();
-    return h('div', { class: 'card pad' }, cv, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } },
+    return h('div', { class: 'card pad' }, cv, h('div', { class: 'btn-row', style: { justifyContent: 'center', marginTop: '8px' } }, Postcard.button(() => { draw(); return cv; }, `The night sky over ${s.str(4, 8)}`, `${s.str(4, 8)} night sky`)), h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } },
       cons.length ? `${cons.length} constellation${cons.length === 1 ? '' : 's'} in your sky · drag to look around · the one you’re editing glows` : 'No constellations yet. Draw one below, or ask Celeste at the observatory.'));
   }
 

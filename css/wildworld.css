@@ -672,3 +672,28 @@ canvas.model3d:active { cursor: grabbing; }
 .pattern-tile.missing { opacity: .7; border-style: dashed !important; }
 .wh-q { width: 100%; aspect-ratio: 1; border-radius: 10px; display: grid; place-items: center; font-size: 26px; font-weight: 900; color: #8ec9e8; background: repeating-linear-gradient(45deg, #eef8ff 0 6px, #ffffff 6px 12px); }
 @media (prefers-reduced-motion: reduce) { .wh-boat, .wh-fish { animation: none; } }
+.town3d-tools { margin: 8px 0 0; flex-wrap: wrap; }
+.town3d-tools select { min-width: 0; }
+.btn.small.on { background: var(--leaf); color: #fff; border-color: transparent; }
+.room3d-canvas { outline: none; border-radius: 14px; cursor: grab; touch-action: none; }
+.room3d-canvas:focus-visible { box-shadow: 0 0 0 3px var(--leaf); }
+.room3d-info { font-size: 12px; text-align: center; margin-top: 6px; min-height: 1.4em; }
+
+/* The guide: a tiny round world (a curved grassy hilltop with an apple tree and a red-roofed house under a sky circle,
+   a cloud drifting past), drawn for Leaflet. */
+.guide-sprout {
+  overflow: hidden; border: 3px solid #fff; width: 62px; height: 62px;
+  background: radial-gradient(circle at 70% 26%, #fff6c8 0 9%, transparent 10%), linear-gradient(180deg, #9fdcff, #dff4ff 70%);
+  box-shadow: 0 5px 0 #c9b98d, 0 12px 20px -10px rgba(60, 50, 0, .6);
+}
+.guide-sprout::before {
+  inset: 0; border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 58 58'%3E%3Ccircle cx='29' cy='78' r='40' fill='%2353a84b'/%3E%3Ccircle cx='29' cy='80' r='40' fill='%236dbd63'/%3E%3Cpath d='M22 58c2-8 6-14 13-18' stroke='%23e8d49a' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3Crect x='16.6' y='30' width='3.2' height='10' rx='1.2' fill='%238a5a32'/%3E%3Ccircle cx='18.2' cy='26' r='8.4' fill='%233f9a4a'/%3E%3Ccircle cx='15' cy='24' r='3.4' fill='%2357b04a'/%3E%3Ccircle cx='14.5' cy='28.5' r='1.6' fill='%23e4483d'/%3E%3Ccircle cx='21.5' cy='23' r='1.6' fill='%23e4483d'/%3E%3Ccircle cx='22' cy='29.5' r='1.6' fill='%23e4483d'/%3E%3Crect x='31' y='30' width='13' height='10' rx='1' fill='%23f6e7c8'/%3E%3Cpath d='M29 31l8.5-8 8.5 8z' fill='%23d9573f'/%3E%3Crect x='35.8' y='34' width='3.4' height='6' rx='1' fill='%238a5a32'/%3E%3Crect x='40.5' y='33' width='2.4' height='2.4' fill='%23ffe9a6'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.guide-sprout::after {
+  left: -24px; top: 9px; width: 22px; height: 9px; transform-origin: center;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 9'%3E%3Cpath d='M3 8.5h16a3 3 0 0 0 0-6 4.5 4.5 0 0 0-8.4-1A3.6 3.6 0 0 0 3 8.5z' fill='%23fff'/%3E%3C/svg%3E") center / contain no-repeat;
+  animation: guidecloud 14s linear infinite;
+}
+@keyframes guidecloud { from { transform: translateX(0); } to { transform: translateX(110px); } }
+@media (prefers-reduced-motion: reduce) { .guide-sprout::after { animation: none; left: 6px; } }
