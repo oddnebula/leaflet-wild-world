@@ -233,7 +233,19 @@
     } catch (err) { return null; }
   }
 
-  window.GameSound = { load, unload, ready, play, playMusic, stopMusic, analyze, get playingMusic() { return !!music; }, get context() { return ctx; } };
+  // What the sound archive holds, for the Sound Room: music sequence numbers, and the effects in each effect archive.
+  function contents() {
+    if (!info) return null;
+    const music = [], effects = [];
+    info.seq.forEach((e, i) => { if (e) music.push(i); });
+    info.ssar.forEach((e, arc) => {
+      if (!e) return;
+      try { const f = info.file(u16(sdat, e)), n = u32(f, 0x1C); const ids = []; for (let k = 0; k < n; k++) if (u32(f, 0x20 + k * 12) !== 0xFFFFFFFF) ids.push(arc * 1000 + k); if (ids.length) effects.push({ arc, ids }); } catch (err) { /* unreadable archive: skipped */ }
+    });
+    return { music, effects };
+  }
+
+  window.GameSound = { load, unload, ready, play, playMusic, stopMusic, analyze, contents, get playingMusic() { return !!music; }, get context() { return ctx; } };
 
   // Animalese from the game's voice syllables (SndMgr_GetVoiceSeqIndex: archive 0, sequence = syllable + 207 for the
   // default voice). Syllables follow the kana order, so each consonant + vowel pair picks the matching kana.

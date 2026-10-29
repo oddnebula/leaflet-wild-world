@@ -128,6 +128,7 @@
         ),
         section('🎵 Town tune', 'Plays at the gate, the town hall and when your neighbors hum'),
         window.TuneEditor.editor(s, refresh),
+        window.TuneEditor.book(s, refresh),
         section('🍐 Native fruit'),
         card(
           row('Native fruit', 'Your town’s own fruit. It sells for 100 bells here, while the other four fruits sell for 500. Trees already planted keep the fruit they grow.',

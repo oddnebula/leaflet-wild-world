@@ -84,5 +84,26 @@
       legend);
   }
 
-  window.TuneEditor = { editor, read, write, TUNE };
+  // The tune book: well-known melodies that are in the public domain (nursery rhymes, folk songs, Beethoven), each
+  // fitted to the game's 16 steps and its notes (low G to high E, no sharps or flats). Game and film themes are left
+  // out on purpose: they belong to their composers.
+  const BOOK = [
+    ['Twinkle, Twinkle, Little Star', [3, 3, 7, 7, 8, 8, 7, 14, 6, 6, 5, 5, 4, 4, 3, 14]],
+    ['Ode to Joy (Beethoven)', [5, 5, 6, 7, 7, 6, 5, 4, 3, 3, 4, 5, 5, 4, 4, 14]],
+    ['Frère Jacques', [3, 4, 5, 3, 3, 4, 5, 3, 5, 6, 7, 14, 5, 6, 7, 14]],
+    ['Mary Had a Little Lamb', [5, 4, 3, 4, 5, 5, 5, 14, 4, 4, 4, 14, 5, 7, 7, 14]],
+    ['Happy Birthday', [0, 0, 1, 0, 3, 2, 14, 15, 0, 0, 1, 0, 4, 3, 14, 15]],
+    ['Jingle Bells', [5, 5, 5, 14, 5, 5, 5, 14, 5, 7, 3, 4, 5, 14, 14, 14]],
+    ['Row, Row, Row Your Boat', [3, 14, 3, 14, 3, 4, 5, 14, 5, 4, 5, 6, 7, 14, 14, 14]],
+    ['London Bridge', [7, 8, 7, 6, 5, 6, 7, 14, 4, 5, 6, 14, 5, 6, 7, 14]],
+    ['Old MacDonald', [7, 7, 7, 4, 5, 5, 4, 14, 9, 9, 8, 8, 7, 14, 15, 15]],
+  ];
+  function book(s, refresh) {
+    return h('div', { class: 'tune-book' }, h('span', { class: 'muted' }, '📖 Tune book:'),
+      BOOK.map(([name, notes]) => h('button', { class: 'btn small', title: 'Listen first, then press Use', onclick: () => play(notes, () => {}) }, `▶ ${name}`)),
+      h('select', { class: 'field w-m', onchange: e => { const k = +e.target.value; if (k < 0) return; write(s, BOOK[k][1]); sfx.bell(); toast(`Your town tune is now ${BOOK[k][0]}`, '🎵'); refresh(); } },
+        h('option', { value: -1 }, 'Use one…'), BOOK.map(([name], k) => h('option', { value: k }, name))));
+  }
+
+  window.TuneEditor = { editor, read, write, TUNE, book, BOOK };
 })();

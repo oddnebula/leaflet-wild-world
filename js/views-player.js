@@ -43,18 +43,48 @@
     const flagBits = h('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } }, stateSel, giftSel);
     // The letter on its own stationery, drawn from the ROM when it's loaded.
     const paperCard = h('div', { class: 'letter-card' }, intro, body, end);
+    // Game view: the letter drawn on its stationery in the game's own font (from the ROM), roughly as the game lays it
+    // out: greeting, the body wrapped to the paper, sign-off on the right.
+    const gameView = h('canvas', { class: 'letter-game', title: 'How it looks in the game (the layout is approximate)' });
+    let showGame = false;
+    const viewBtn = h('button', { class: 'btn small', onclick: () => { showGame = !showGame; sfx.click(); dress(); } }, '👁 Game view');
+    function drawGame(pp, F) {
+      const W = pp.w, H = pp.h, c = gameView, x0 = 14, lh = 16;   // the font's 16-pixel line, which the ruled papers follow
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d'), img = new Image();
+      img.onload = () => {
+        ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, W, H); ctx.drawImage(img, 0, 0);
+        const ink = '#3d2b1a', lines = [];
+        for (const para of acc.str(off + 0x4C, 128).split('\n')) {
+          let line = '';
+          for (const word of para.split(' ')) { const t = line ? `${line} ${word}` : word; if (F.width(t) > W - x0 * 2 && line) { lines.push(line); line = word; } else line = t; }
+          lines.push(line);
+        }
+        let y = 6;
+        F.draw(ctx, acc.str(off + 0x34, 24), x0, y, ink); y += lh;
+        for (const l of lines) { if (y > H - lh * 2 - 6) break; F.draw(ctx, l, x0, y, ink); y += lh; }
+        const sign = acc.str(off + 0xCC, 32);
+        F.draw(ctx, sign, W - x0 - F.width(sign), H - lh - 10, ink);
+      };
+      img.src = pp.url;
+    }
     const dress = () => {
       const pp = window.ROM && ROM.ready && ROM.paperURL ? ROM.paperURL(acc.u8(off + 0xED) & 63) : null;
+      const F = pp && ROM.font && ROM.font();
+      viewBtn.hidden = !F;
+      if (showGame && F) { drawGame(pp, F); paperCard.replaceChildren(gameView); paperCard.classList.add('game'); viewBtn.textContent = '✏️ Edit'; }
+      else { paperCard.replaceChildren(intro, body, end); paperCard.classList.remove('game'); viewBtn.textContent = '👁 Game view'; }
       paperCard.classList.toggle('paper', !!pp);
-      paperCard.style.backgroundImage = pp ? `url(${pp.url})` : '';
+      paperCard.style.backgroundImage = pp && !(showGame && F) ? `url(${pp.url})` : '';
       paperCard.style.aspectRatio = pp ? `${pp.w} / ${pp.h}` : '';
     };
+    [body, intro, end].forEach(el => el.addEventListener('change', () => { if (showGame) dress(); }));
     dress();
     return h('div', { class: 'card' },
       h('div', { style: { padding: '14px 16px 6px', display: 'flex', alignItems: 'center', gap: '10px' } }, h('b', null, title), empty ? h('span', { class: 'badge lab' }, 'Empty') : null, h('span', { class: 'off mono muted', style: { fontSize: '10.5px' } }, hex(off, 5))),
       h('div', { style: { padding: '0 16px 12px', display: 'grid', gridTemplateColumns: '1fr 150px', gap: '14px' } },
         paperCard,
-        h('div', null, att, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '8px' } }, 'Stationery'),
+        h('div', null, att, h('div', { style: { marginTop: '8px' } }, viewBtn), h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '8px' } }, 'Stationery'),
           selectInput(range(64).map(p => [p, paperName(p)]), () => acc.u8(off + 0xED), v => { acc.set8(off + 0xED, v); dress(); }, { width: 'w-m' }))),
       row('From', 'Sender name and town', h('span', { style: { display: 'flex', gap: '6px' } },
         textInput(() => acc.str(off + 0x28, 8), v => acc.setStr(off + 0x28, 8, v), 8, { width: 'w-s', check: WWSave.canEncode }),

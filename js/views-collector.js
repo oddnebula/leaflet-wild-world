@@ -142,4 +142,58 @@
       return root;
     },
   });
+
+  // ---------- Sound Room ----------
+  // Every music track and sound effect in the game's sound archive, by number (named where Leaflet knows what it is),
+  // and each neighbor saying their catchphrase in Animalese. Played from the person's ROM.
+  const SR = { tab: 'music', arc: -1, playing: null };
+  function trackName(n) {
+    if (n >= 0x16 && n < 0x16 + 24) { const hr = n - 0x16; return `Town theme, ${hr % 12 || 12} ${hr < 12 ? 'AM' : 'PM'}`; }
+    if (n >= 176 && n < 246 && D.songs[n - 176]) return `${D.songs[n - 176]} (stereo)`;
+    if (n >= 99 && n < 169 && D.songs[n - 99]) return `${D.songs[n - 99]} (live)`;
+    return '';
+  }
+  VIEWS.push({
+    id: 'sounds', group: 'Home', icon: '🔊', title: () => 'Sound Room', sub: () => 'Every track and sound in the game, and your neighbors’ voices',
+    noSave: true,
+    tips: ['Track numbers are the game’s own sequence numbers, so they match what modders and researchers use.', 'Voices use the game’s Animalese syllables.'],
+    render(s, { refresh }) {
+      const list = window.GameSound && GameSound.contents && GameSound.contents();
+      if (!list) return [h('div', { class: 'card' }, h('div', { class: 'empty-note' }, h('span', { class: 'em' }, '🔊'), 'The game’s music and sounds come from your ROM. Open it on the Welcome screen to listen.'))];
+      const tabs = [['music', `🎵 Music (${list.music.length})`], ['effects', `🔔 Sound effects (${list.effects.reduce((n, a) => n + a.ids.length, 0)})`], ['voices', '🗣️ Voices']];
+      const nav = h('div', { class: 'tabs' }, tabs.map(([t, l]) => h('button', { class: 'tab' + (SR.tab === t ? ' on' : ''), onclick: () => { SR.tab = t; sfx.click(); refresh(); } }, l)));
+      const playBtn = (key, go) => {
+        const b = h('button', { class: 'btn small' + (SR.playing === key ? ' leaf' : '') }, SR.playing === key ? '■' : '▶');
+        b.onclick = () => {
+          if (SR.playing === key) { GameSound.stopMusic(); SR.playing = null; refresh(); return; }
+          const ok = go(); if (!ok) { sfx.error(); toast('That one is silent or couldn’t be played', '🔇'); return; }
+          SR.playing = key; refresh();
+        };
+        return b;
+      };
+      let body;
+      if (SR.tab === 'music') {
+        body = h('div', { class: 'card jb-list' }, list.music.map(n => h('div', { class: 'jb-row' + (SR.playing === 'm' + n ? ' on' : '') },
+          h('span', { class: 'jb-n mono' }, n), h('b', null, trackName(n) || `Track ${n}`), h('span', { class: 'spacer' }),
+          playBtn('m' + n, () => !!GameSound.playMusic(n, { onEnd: () => { if (SR.playing === 'm' + n) { SR.playing = null; if (APP.view === 'sounds') refresh(); } } })))));
+      } else if (SR.tab === 'effects') {
+        if (SR.arc < 0 || !list.effects.some(a => a.arc === SR.arc)) SR.arc = list.effects[0] ? list.effects[0].arc : 0;
+        const a = list.effects.find(x => x.arc === SR.arc);
+        body = [h('div', { class: 'card pad cat-bar' }, h('span', { class: 'muted' }, 'Archive'), UI.selectInput(list.effects.map(x => [x.arc, `${x.arc} · ${x.ids.length} sounds`]), () => SR.arc, v => { SR.arc = v; refresh(); }, { width: 'w-m' }),
+            h('span', { class: 'muted' }, 'Sound number = archive × 1000 + the effect’s number.')),
+          h('div', { class: 'card pad sr-grid' }, (a ? a.ids : []).map(id => h('button', { class: 'btn small sr-fx', title: `Sound ${id}`, onclick: () => { if (!GameSound.play(id)) sfx.error(); } }, `▶ ${id}`)))];
+      } else {
+        const who = s ? [0, 1, 2, 3, 4, 5, 6, 7].map(v => s.villagerBase(v)).filter(b => s.u8(b + 0x6CB) !== 0xFF) : [];
+        const byId = new Map(D.villagers.map(x => [x.id, x]));
+        body = !s ? h('div', { class: 'card' }, h('div', { class: 'empty-note' }, 'Open a save to hear your neighbors.'))
+          : h('div', { class: 'card jb-list' }, who.map(b => {
+            const nm = byId.get(s.u8(b + 0x6CB))?.name || 'Neighbor', cp = s.str(b + 0x6DE, 10);
+            return h('div', { class: 'jb-row' }, h('span', { class: 'jb-n' }, '🗣️'), h('b', null, nm), h('span', { class: 'muted' }, `“…${cp}!”`), h('span', { class: 'spacer' }),
+              h('button', { class: 'btn small', onclick: () => window.GameVoice && GameVoice.say(cp) }, 'Catchphrase'),
+              h('button', { class: 'btn small', onclick: () => window.GameVoice && GameVoice.say(`Hi, I'm ${nm}! ${cp}!`) }, 'Hello'));
+          }));
+      }
+      return [nav, body];
+    },
+  });
 })();

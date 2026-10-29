@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   const DB = 'leaflet-rom', STORE = 'files', KEY = 'ADME';
-  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//];
+  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^font\/fontA_(head|attr|img)\.bin$/];
   let files = null;            // Map path -> Uint8Array (raw, possibly compressed)
   let stale = false;           // a cache from an older Leaflet that lacks files this version reads (the start card asks for the ROM again)
   const listeners = new Set();
@@ -214,13 +214,43 @@
     return out;
   }
 
+  // The game's letter font (font/fontA_*): head = glyph count (u32) and cell size (u16 width, u16 height); attr = for
+  // each glyph its character code (u16, Latin-1) and width in pixels (u16); img = 1-bit cells, one u16 per row with the
+  // leftmost pixel in the top bit. All but head are LZ77 compressed.
+  let fontCache = null, fontFor = null;
+  function font() {
+    if (fontCache && fontFor === files) return fontCache;
+    const hd = file('font/fontA_head.bin'), at = file('font/fontA_attr.bin'), im = file('font/fontA_img.bin');
+    if (!hd || !at || !im) return null;
+    const n = hd[0] | (hd[1] << 8), cw = hd[4] | (hd[5] << 8), ch = hd[6] | (hd[7] << 8), rowBytes = cw >> 3, cell = rowBytes * ch;
+    if (cw !== 16 || at.length < n * 4 || im.length < n * cell) return null;
+    const glyphs = new Map();
+    for (let i = 0; i < n; i++) glyphs.set(at[i * 4] | (at[i * 4 + 1] << 8), { w: at[i * 4 + 2] | (at[i * 4 + 3] << 8), i });
+    const width = c => (glyphs.get(c.charCodeAt(0)) || glyphs.get(0x3F)).w + 1;
+    // Draws text at (x, y) on a 2D context in the given colour; characters the font lacks become "?".
+    function draw(ctx, text, x, y, color, scale = 1) {
+      ctx.fillStyle = color;
+      for (const c of text) {
+        const g = glyphs.get(c.charCodeAt(0)) || glyphs.get(0x3F);
+        for (let r = 0; r < ch; r++) {
+          const row = (im[g.i * cell + r * 2] << 8) | im[g.i * cell + r * 2 + 1];
+          for (let px = 0; px < cw; px++) if (row & (0x8000 >> px)) ctx.fillRect(x + px * scale, y + r * scale, scale, scale);
+        }
+        x += (g.w + 1) * scale;
+      }
+      return x;
+    }
+    fontCache = { height: ch, width: t => [...t].reduce((n, c) => n + width(c), 0), draw }; fontFor = files;
+    return fontCache;
+  }
+
   async function restore() {
     const map = await loadCache();
     if (map && map.size) { files = map; stale = WANT.some(re => ![...map.keys()].some(k => re.test(k))); loadSound(); listeners.forEach(f => f()); }
   }
 
   window.ROM = {
-    open, restore, forget, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
+    open, restore, forget, font, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
     get ready() { return !!files; },
     get stale() { return stale; },
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },

@@ -133,7 +133,35 @@
       card(
         row('Name', null, textInput(() => s.str(o + 0x16, 16), v => s.setStr(o + 0x16, 16, v), 16, { check: WWSave.canEncode }), o + 0x16),
         row('Made by', `${s.str(o + 0xC, 8) || 'Nobody'} from ${s.str(o + 2, 8) || '?'}`, h('span', { style: { display: 'flex', gap: '6px' } }, textInput(() => s.str(o + 0xC, 8), v => s.setStr(o + 0xC, 8, v), 8, { width: 'w-s', check: WWSave.canEncode }), textInput(() => s.str(o + 2, 8), v => s.setStr(o + 2, 8, v), 8, { width: 'w-s', check: WWSave.canEncode })), o),
-        row('Line numbers', lines().join(', ') || 'None', h('button', { class: 'btn small danger', onclick: () => { setLines([]); sfx.pop(); refresh(); } }, 'Erase lines'), o + 0x26))];
+        row('Line numbers', lines().join(', ') || 'None', h('button', { class: 'btn small danger', onclick: () => { setLines([]); sfx.pop(); refresh(); } }, 'Erase lines'), o + 0x26),
+        row('Share it', 'A short code a friend can paste into their own sky, or a picture to post.', h('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
+          h('button', { class: 'btn small', disabled: !cur.size, onclick: () => { const code = skyCode(s.str(o + 0x16, 16), lines()); (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast('Code copied', '✨'), () => UI.confirmSheet('Your constellation code', code, 'Done')); } }, '📋 Copy code'),
+          h('button', { class: 'btn small', disabled: !cur.size, onclick: () => skyPicture(s.str(o + 0x16, 16), lines()) }, '🖼️ Picture'),
+          h('input', { class: 'field w-m', placeholder: 'Paste a code: WWSKY:…', spellcheck: 'false', onchange: e => { const r = readSkyCode(e.target.value); if (!r) { sfx.error(); toast('That isn’t a constellation code', '⚠️'); return; } setLines(r.lines); s.setStr(o + 0x16, 16, r.name); sfx.bell(); toast(`${r.name || 'The constellation'} is in your sky`, '✨'); refresh(); } }))))];
+  }
+  // Share codes: "WWSKY:<name>:<line numbers in base 36>", made by Leaflet (the game has no such code).
+  function skyCode(name, lines) { return `WWSKY:${encodeURIComponent(name)}:${lines.map(n => n.toString(36)).join('.')}`; }
+  function readSkyCode(t) {
+    const m = /WWSKY:([^:\s]*):([0-9a-z.]+)/i.exec(t.trim()); if (!m) return null;
+    const lines = [...new Set(m[2].split('.').filter(Boolean).map(x => parseInt(x, 36)))].filter(n => n >= 0 && n < D.skyLines.length && D.skyLines[n].length).slice(0, 16);
+    let name = ''; try { name = decodeURIComponent(m[1]); } catch (e) { /* keep it blank */ }
+    name = [...name].filter(c => WWSave.canEncode(c)).join('').slice(0, 16);
+    return lines.length ? { name, lines } : null;
+  }
+  // A picture of one constellation on Leaflet's own night sky (no game art).
+  function skyPicture(name, lines) {
+    const C = 16, cv = document.createElement('canvas'); cv.width = 64 * C; cv.height = 32 * C + 60;
+    const g = cv.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, cv.height);
+    grad.addColorStop(0, '#141b3d'); grad.addColorStop(1, '#2b2f6b'); g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height);
+    const at = ([x, y]) => [x * C + C / 2, y * C + C / 2 + 10];
+    const stars = new Set(); D.skyLines.forEach(cells => cells.forEach(c => stars.add(c.join(','))));
+    g.fillStyle = 'rgba(255,255,255,.35)'; for (const k of stars) { const [x, y] = at(k.split(',').map(Number)); g.beginPath(); g.arc(x, y, 1.6, 0, 7); g.fill(); }
+    g.strokeStyle = '#ffe48a'; g.lineWidth = 4; g.lineCap = g.lineJoin = 'round'; g.shadowColor = '#ffd84a'; g.shadowBlur = 10;
+    for (const n of lines) { const pts = D.skyLines[n].map(at); g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke(); }
+    g.fillStyle = '#fff6c8'; for (const n of lines) for (const c of D.skyLines[n]) { const [x, y] = at(c); g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); }
+    g.shadowBlur = 0; g.fillStyle = '#fff9e8'; g.font = '800 26px Nunito, system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(name || 'My constellation', cv.width / 2, cv.height - 22);
+    cv.toBlob(b => { const a = h('a', { href: URL.createObjectURL(b), download: `${name || 'Constellation'}.png` }); document.body.append(a); a.click(); a.remove(); });
+    sfx.pop();
   }
   VIEWS.push({
     id: 'sky', group: 'Places', icon: '✨', title: () => 'Celeste’s Sky', sub: () => 'The constellations your town has made',

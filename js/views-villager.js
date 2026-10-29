@@ -86,6 +86,7 @@
               row('Catchphrase', 'What they say at the end of sentences. Up to 10 characters.', textInput(() => s.str(b + 0x6DE, 10), x => s.setStr(b + 0x6DE, 10, x), 10, { check: WWSave.canEncode }), b + 0x6DE),
               row('Home town', 'The town this villager considers home (useful when they arrive from a friend’s town).', h('span', { style: { display: 'flex', gap: '6px' } }, textInput(() => s.str(b + 0x6C2, 8), x => s.setStr(b + 0x6C2, 8, x), 8, { width: 'w-s', check: WWSave.canEncode }), numberInput(() => s.u16(b + 0x6C0), x => s.set16(b + 0x6C0, x), { max: 0xFFFF, width: 'w-s' })), b + 0x6C0),
             ),
+            section('🔁 Trade this neighbor', 'Move them to a friend’s town, or welcome someone from one'), tradeCard(s, v, refresh),
             section('Outfit'),
             h('div', { class: 'card' }, h('div', { class: 'slots', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } },
               h('div', null, slot(() => s.u16(b + 0x6EC), x => s.set16(b + 0x6EC, x), { title: 'Choose a shirt', categories: ['Shirts'] }), h('div', { class: 'muted', style: { textAlign: 'center', fontSize: '11.5px', marginTop: '4px', fontWeight: 650 } }, 'Shirt')))),
@@ -201,6 +202,48 @@
   // The rest of SaveVillagers: who goes outdoors (OutdoorSchedule), move-in / move-out times, the nickname cooldown,
   // the villagers who have ever lived here (speciesHistory, one bit per villager; newcomers are picked from the rest),
   // the last moved-out / moved-in / sick neighbor and the day furniture was last left behind.
+  // Villager trading: a neighbor's whole record (0x700 bytes: species, personality, catchphrase, house furniture,
+  // memories, pattern, letter, plans) in a small file, the way the game carries a villager between towns. Importing
+  // keeps this slot's house where it is on the map (the house position at +0x6E8) and marks the species as having lived
+  // here. The game's own move between towns may update more than this, so it's marked Likely.
+  const TRADE_MAGIC = 'LEAFVIL1', REC = 0x700;
+  function tradeCard(s, v, refresh) {
+    const b = s.villagerBase(v), id = s.u8(b + 0x6CB), name = id === 0xFF ? null : byId.get(id)?.name || `Villager ${hex(id, 2)}`;
+    const exportIt = () => {
+      const out = new Uint8Array(17 + REC);
+      out.set([...TRADE_MAGIC].map(c => c.charCodeAt(0)), 0);
+      out[8] = s.region === 'USA' ? 0x8A : 0xC5;
+      out.set(s.bytes(4, 8), 9);
+      out.set(s.bytes(b, REC), 17);
+      const a = h('a', { href: URL.createObjectURL(new Blob([out])), download: `${name} from ${s.str(4, 8)}.wwvillager` });
+      document.body.append(a); a.click(); a.remove(); sfx.pop(); toast(`${name} is packed and ready to travel`, '🧳');
+    };
+    const importIt = () => {
+      const inp = h('input', { type: 'file', accept: '.wwvillager' });
+      inp.onchange = async () => {
+        const f = inp.files[0]; if (!f) return;
+        const d = new Uint8Array(await f.arrayBuffer());
+        const fail = msg => { sfx.error(); toast(msg, '⚠️'); };
+        if (d.length !== 17 + REC || String.fromCharCode(...d.subarray(0, 8)) !== TRADE_MAGIC) return fail('That isn’t a villager file from Leaflet.');
+        const rec = d.subarray(17), nid = rec[0x6CB], who = byId.get(nid);
+        if (nid === 0xFF || !who) return fail('That file doesn’t hold a villager.');
+        if ((d[8] === 0x8A ? 'USA' : 'Europe') !== s.region) return fail(`That villager is from a ${d[8] === 0x8A ? 'USA' : 'European'} save; this one is ${s.region}.`);
+        for (let o = 0; o < 8; o++) if (o !== v && s.u8(s.villagerBase(o) + 0x6CB) === nid) return fail(`${who.name} already lives in this town.`);
+        if (!await UI.confirmSheet(`Welcome ${who.name}?`, `${who.name} replaces ${name} in this house, bringing their catchphrase, furniture, pattern, letter and memories. ${name} is kept in Backups with the rest of the town as it is now.`, `Welcome ${who.name}`)) return;
+        if (window.Backups) await Backups.add(s.export(), 'manual', { file: `before ${who.name} moved in` });
+        const pos = s.bytes(b + 0x6E8, 2);
+        s.setBytes(b, rec);
+        s.setBytes(b + 0x6E8, pos);
+        s.setBit(VB + 0x38D4, nid, true);   // species history: they've lived here now
+        sfx.bell(); toast(`${who.name} moved in!`, '🏡'); refresh();
+      };
+      inp.click();
+    };
+    return card(
+      row('Send them to another town', name ? `Saves ${name} as a .wwvillager file a friend can import into their Wild World save.` : 'Nobody lives here.', h('button', { class: 'btn small', disabled: !name, onclick: exportIt }, '🧳 Export')),
+      row('Welcome a villager from another town', name ? `Likely: replaces ${name} with a villager from a .wwvillager file, keeping the house where it is. The game’s own move may update a little more.` : 'Import into a neighbor who has a house; an empty lot has no house for them yet.', h('button', { class: 'btn small leaf', disabled: !name, onclick: importIt }, '🏡 Import…')));
+  }
+
   const VB = 0x8A3C, OUT_ORDER = VB + 0x381C, OUT_NOW = VB + 0x3824, OUT_ROLL = VB + 0x3828, NICK = VB + 0x38C0, MOVE_IN = VB + 0x38C4, MOVE_OUT = VB + 0x38CC,
     HISTORY = VB + 0x38D4, LAST_OUT = VB + 0x38E8, LAST_IN = VB + 0x38E9, LAST_SICK = VB + 0x38EA, DROP = VB + 0x38EE, HOUSE_STYLES = 0x1592C;
   function neighborhood(s, names, refresh) {

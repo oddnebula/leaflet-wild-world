@@ -26,12 +26,12 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [ ] Move-out predictor: needs the game's move-out rules from the decompilation first.
 
 **Chunk 3: fans**
-- [ ] Villager trading: export a neighbor and move them into another save.
-- [ ] Letter studio on the real stationery, in the game's font.
-- [ ] Town tune book.
-- [ ] Villager voices and a sound test.
-- [ ] The town tune with the game's real instrument.
-- [ ] Constellation gallery and share codes.
+- [x] Villager trading: export a neighbor to a .wwvillager file and import one into a neighbor's house (marked Likely: the game's own move may update a little more).
+- [x] Letter studio: a Game view draws each letter on its stationery in the game's own font (font/fontA, read from the ROM).
+- [x] Town tune book: public-domain melodies only (no game or film themes).
+- [x] Sound Room: all 342 music tracks and every sound effect by number, and neighbors saying their catchphrase in Animalese. Each villager's own voice pitch is still to research.
+- [ ] The town tune with the game's real instrument: needs MelodyPlayer from the decompilation.
+- [x] Constellation share codes and pictures on Celeste's Sky. A library of famous shapes is still to draw.
 
 **Chunk 4: more 3D (from your own ROM)**
 - [ ] Your resident in 3D: outfit, hair, tan, held tool.
