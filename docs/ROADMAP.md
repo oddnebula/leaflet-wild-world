@@ -38,7 +38,7 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [x] Neighbors' houses in 3D: their room layout from the ROM, with the game's own furniture, wallpaper and flooring.
 - [x] A night sky you can turn, with every constellation in town (Celeste's Sky).
 - [ ] Main Street in 3D: Nook's with this week's stock, the Able Sisters, the museum.
-- [ ] Walk around the whole town in 3D (next).
+- [x] Walk around the whole town in 3D, or see it from above: every map item exactly placed, the ground shaped from each acre's type (drawn by Leaflet).
 
 **Chunk 5: polish**
 - [ ] Compare any two backups.

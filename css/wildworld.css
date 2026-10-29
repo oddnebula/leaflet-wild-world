@@ -651,3 +651,8 @@ canvas.model3d:active { cursor: grabbing; }
 .letter-game { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .sky-dome { width: 100%; height: auto; display: block; border-radius: 12px; cursor: grab; touch-action: none; }
 .sky-dome:active { cursor: grabbing; }
+.town3d { display: block; margin: 0 auto; border-radius: 14px; cursor: grab; touch-action: none; outline: none; box-shadow: 0 0 0 3px transparent; }
+.town3d:focus { box-shadow: 0 0 0 3px var(--leaf); }
+.town3d:active { cursor: grabbing; }
+.town3d-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.town3d-info { font-weight: 800; color: var(--text-2); font-size: 13px; }

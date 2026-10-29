@@ -42,7 +42,9 @@
     return c;
   }
 
-  const images = {};
-  for (const [id, name] of window.WW_DATA.acres) images[id] = draw(name).toDataURL();
+  const images = {}, canvases = {};
+  for (const [id, name] of window.WW_DATA.acres) { canvases[id] = draw(name); images[id] = canvases[id].toDataURL(); }
   window.WW_ACRE_IMAGES = images;
+  window.WW_ACRE_CANVAS = canvases;   // the same drawings as pixels (the 3D town reads its ground from them)
+  window.WW_ACRE_COLORS = C;
 })();
