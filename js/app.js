@@ -33,6 +33,7 @@
     let v = VIEWS.find(x => x.id === id) || VIEWS[0];
     if (!state.save && !v.noSave) v = VIEWS[0];   // views edit a loaded save, except Welcome and Backups
     state.view = v.id;
+    if (state.save) state.save.sealStep();   // a new page, or a page redrawn after a change, starts a new undo step
     $('pageTitle').textContent = v.title(state.save);
     $('pageSub').textContent = state.save && v.sub ? v.sub(state.save) : '';
     UI.setRegistryView(v.id);
@@ -178,6 +179,8 @@
   function updateChrome() {
     const s = state.save;
     $('saveBtn').disabled = !s;
+    $('undoBtn').disabled = !(s && s.canUndo); $('redoBtn').disabled = !(s && s.canRedo);
+    if (s && s.canUndo) { const u = s.history.undo[s.history.undo.length - 1]; $('undoBtn').title = `Undo${u.label ? ` (a change on ${u.label})` : ''} (⌘Z)`; }
     $('saveBtn').classList.toggle('pulse', !!(s && s.dirty));
     const chip = $('bellChip');
     if (s && s.playerExists(0)) {
@@ -203,8 +206,25 @@
     say(tips[Math.floor(Math.random() * tips.length)]);
   });
   $('globalSearch').addEventListener('input', e => runSearch(e.target.value));
+  // Undo and redo: every change to the open save, on any page.
+  function undoRedo(redo) {
+    const s = state.save; if (!s) return;
+    const st = redo ? s.redo() : s.undo();
+    if (!st) { sfx.error(); return; }
+    sfx.click(); toast(`${redo ? 'Redone' : 'Undone'}: ${st.edits.length === 1 ? 'a change' : `${st.edits.length} changes`}${st.label ? ` on ${st.label}` : ''}`, redo ? '↷' : '↶');
+    const c = $('content'), top = c.scrollTop;
+    refresh();
+    c.scrollTop = top;   // stay where you were on the page
+  }
+  $('undoBtn').addEventListener('click', () => undoRedo(false));
+  $('redoBtn').addEventListener('click', () => undoRedo(true));
+  WWSave.label = () => { const v = VIEWS.find(x => x.id === state.view); return v ? v.title(state.save) : ''; };
   document.addEventListener('keydown', e => {
     const mod = e.metaKey || e.ctrlKey;
+    // Text fields keep their own undo while you type.
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable;
+    if (mod && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); undoRedo(e.shiftKey); return; }
+    if (mod && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); undoRedo(true); return; }
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
     else if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); }
     else if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); $('globalSearch').focus(); }

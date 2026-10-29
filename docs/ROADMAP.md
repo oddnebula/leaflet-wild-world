@@ -41,9 +41,9 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [x] Walk around the whole town in 3D, or see it from above: every map item exactly placed, the ground shaped from each acre's type (drawn by Leaflet).
 
 **Chunk 5: polish**
-- [ ] Compare any two backups.
-- [ ] Undo history across every page.
-- [ ] Japanese and Korean saves.
+- [x] Compare any two backups: the diary's story of what changed, and which parts of the save differ (Backups page).
+- [x] Undo and redo across every page (⌘Z, ⇧⌘Z), for the session.
+- [ ] Japanese and Korean saves: every offset and the character set differ, so this needs a Japanese save and decompilation to map against first.
 
 ## Living with your town
 - ✅ **Town diary (S–M).** Every backup is already a snapshot. Diff consecutive ones into a readable journal:

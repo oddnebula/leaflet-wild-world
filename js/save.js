@@ -105,17 +105,44 @@
         out[i++] = code === undefined ? ENCODE.get('?') : code;
       }
       // The game pads names with spaces (0x85) only inside player/town fields; zero-fill is also valid.
-      if (buf) { buf.set(out, o); this.markDirty(); } else this.setBytes(o, out);
+      if (buf) { this.remember(buf, o, n); buf.set(out, o); this.markDirty(); } else this.setBytes(o, out);
     }
     static canEncode(s) { for (const ch of s) if (!ENCODE.has(ch)) return false; return true; }
 
-    touch() { this.markDirty(); }
+    // ---- undo and redo ---------------------------------------------------------------
+    // Every write records the bytes it replaces. Writes less than 0.7 s apart on the same page make one step, so one
+    // click (which may set several fields) undoes in one go. Steps last for the session, up to 300.
+    remember(buf, o, n) {
+      if (this.replaying) return;
+      const H = this.history || (this.history = { undo: [], redo: [], last: 0, sealed: false }), now = Date.now();
+      if (!H.undo.length || H.sealed || now - H.last > 700) {
+        H.undo.push({ when: now, label: WWSave.label ? WWSave.label() : '', edits: [] }); H.sealed = false;
+        if (H.undo.length > 300) H.undo.shift();
+      }
+      H.last = now; H.redo.length = 0;
+      H.undo[H.undo.length - 1].edits.push([buf, o, buf.slice(o, o + n)]);
+    }
+    sealStep() { if (this.history) this.history.sealed = true; }
+    // Puts back the bytes a step recorded and returns the step that would reverse it.
+    replay(step) {
+      const back = [];
+      this.replaying = true;
+      for (let i = step.edits.length - 1; i >= 0; i--) { const [buf, o, old] = step.edits[i]; back.push([buf, o, buf.slice(o, o + old.length)]); buf.set(old, o); }
+      this.replaying = false;
+      return { ...step, edits: back };
+    }
+    undo() { const H = this.history; if (!H || !H.undo.length) return null; const st = H.undo.pop(); H.redo.push(this.replay(st)); H.sealed = true; this.markDirty(); return st; }
+    redo() { const H = this.history; if (!H || !H.redo.length) return null; const st = H.redo.pop(); H.undo.push(this.replay(st)); H.sealed = true; this.markDirty(); return st; }
+    get canUndo() { return !!(this.history && this.history.undo.length); }
+    get canRedo() { return !!(this.history && this.history.redo.length); }
+
+    touch(o, n) { if (o !== undefined) this.remember(this.m, o, n); this.markDirty(); }
     markDirty() { if (!this.dirty) { this.dirty = true; } this.listeners.forEach(f => f()); }
     onChange(f) { this.listeners.push(f); }
 
     // ---- letter storage (separate region) ---------------------------------------------
     lu16(o) { return this.letters[o] | (this.letters[o + 1] << 8); }
-    lset16(o, v) { this.letters[o] = v & 0xFF; this.letters[o + 1] = v >> 8; this.markDirty(); }
+    lset16(o, v) { this.remember(this.letters, o, 2); this.letters[o] = v & 0xFF; this.letters[o + 1] = v >> 8; this.markDirty(); }
 
     // ---- helpers ----------------------------------------------------------------------
     playerBase(p) { return PLAYER + p * PLAYER_SIZE; }

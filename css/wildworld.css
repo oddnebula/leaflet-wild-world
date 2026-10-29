@@ -656,3 +656,7 @@ canvas.model3d:active { cursor: grabbing; }
 .town3d:active { cursor: grabbing; }
 .town3d-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .town3d-info { font-weight: 800; color: var(--text-2); font-size: 13px; }
+.tb-btn.icon-only { font-size: 18px; font-weight: 900; padding: 0 10px; min-width: 38px; justify-content: center; }
+.tb-btn.icon-only:disabled { opacity: .45; }
+.cmp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.cmp-parts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

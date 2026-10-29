@@ -144,6 +144,40 @@
   let cache = null;
   async function refreshList(refresh) { cache = await all(); refresh(); }
 
+  // Compare two versions of a town: the diary's story of what changed, and which parts of the save differ.
+  const cmp = { key: null, a: null, b: null };
+  function compareCard(towns, refresh) {
+    const keys = [...towns.keys()].filter(k => towns.get(k).filter(r => r.kind !== 'draft').length > 1);
+    if (!keys.length) return null;
+    if (!keys.includes(cmp.key)) { cmp.key = keys[0]; cmp.a = cmp.b = null; }
+    const list = towns.get(cmp.key).filter(r => r.kind !== 'draft');   // newest first
+    if (!list.some(r => r.id === cmp.b)) cmp.b = list[0].id;
+    if (!list.some(r => r.id === cmp.a)) cmp.a = list[1].id;
+    const label = r => `${new Date(r.when).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · ${(KINDS[r.kind] || ['', r.kind])[1]}`;
+    const opts = list.map(r => [r.id, label(r)]);
+    let ra = list.find(r => r.id === cmp.a), rb = list.find(r => r.id === cmp.b);
+    if (ra.when > rb.when) [ra, rb] = [rb, ra];   // always older → newer
+    let body;
+    try {
+      const A = new WWSave(new Uint8Array(ra.bytes), 'a.sav'), B = new WWSave(new Uint8Array(rb.bytes), 'b.sav');
+      const lines = window.WW_DIARY ? WW_DIARY.diff(A, B) : [];
+      const parts = new Map(); let n = 0;
+      for (let i = 0; i < A.m.length; i++) if (A.m[i] !== B.m[i]) { n++; const r = window.WW_REGIONS && WW_REGIONS.regionOf(i), k = r ? r[2] : 'Other'; parts.set(k, (parts.get(k) || 0) + 1); }
+      let ln = 0; for (let i = 0; i < A.letters.length; i++) if (A.letters[i] !== B.letters[i]) ln++;
+      if (ln) parts.set('Town hall letters', ln);
+      body = !n && !ln ? h('div', { class: 'muted' }, 'These two versions are identical.') : [
+        lines.length ? h('ul', { class: 'sync-diff-list' }, lines.map(([em, t]) => h('li', null, h('span', null, em), t))) : h('div', { class: 'muted' }, 'Nothing the diary describes changed; the differences are below.'),
+        h('div', { class: 'sub-h', style: { marginTop: '10px' } }, `${fmt(n + ln)} bytes differ`),
+        h('div', { class: 'cmp-parts' }, [...parts.entries()].sort((x, y) => y[1] - x[1]).map(([k, c]) => h('span', { class: 'badge lab' }, `${k}: ${fmt(c)}`)))];
+    } catch (e) { body = h('div', { class: 'muted' }, 'One of these versions couldn’t be read.'); }
+    return [UI.section('🔍 Compare two versions', 'What changed between any two backups'), h('div', { class: 'card pad' },
+      h('div', { class: 'cmp-bar' },
+        keys.length > 1 ? UI.selectInput(keys.map((k, i) => [i, towns.get(k)[0].town]), () => keys.indexOf(cmp.key), v => { cmp.key = keys[v]; refresh(); }, { width: 'w-m' }) : null,
+        UI.selectInput(opts, () => cmp.a, v => { cmp.a = v; refresh(); }, { width: 'w-l' }), h('b', null, '→'),
+        UI.selectInput(opts, () => cmp.b, v => { cmp.b = v; refresh(); }, { width: 'w-l' })),
+      body)];
+  }
+
   function rowFor(r, refresh, current) {
     const [em, label] = KINDS[r.kind] || ['•', r.kind];
     return h('div', { class: 'bk-row' + (r.kind === 'draft' ? ' draft' : '') + (r.hash === current ? ' cur' : '') },
@@ -179,6 +213,7 @@
           native ? row('Copies on disk', 'Each backup is also written to Documents › Leaflet Backups, one folder per town.', h('button', { class: 'btn small', onclick: () => native.postMessage({ cmd: 'revealBackups' }) }, 'Show in Finder')) : null,
           s ? row('Back up now', `Keeps the town that’s open (${s.str(4, 8)}), including unsaved edits, and stars it.`, h('button', { class: 'btn small leaf', onclick: async () => { const r = await add(s.export(), 'manual', { file: s.fileName }); if (r) { r.pinned = true; await update(r); } sfx.bell(); toast('Backed up and starred', '📌'); refreshList(refresh); } }, 'Back up')) : null),
         towns.size ? null : h('div', { class: 'card' }, h('div', { class: 'empty-note' }, h('span', { class: 'em' }, '🗂️'), 'No backups yet. Open a save and Leaflet starts keeping them.')),
+        ...(compareCard(towns, refresh) || []),
         ...[...towns.entries()].map(([key, list]) => [
           section(`🏡 ${list[0].town}`, `${list.length} version${list.length === 1 ? '' : 's'} · newest ${when(list[0].when)}`),
           h('div', { class: 'card bk-list' }, list.map(r => rowFor(r, refresh, current))),

@@ -17,7 +17,7 @@
     const L = s.letters, base = WWSave.C.LETTERS;
     return {
       u8: o => L[o - base], u16: o => L[o - base] | (L[o - base + 1] << 8),
-      set8: (o, v) => { L[o - base] = v; s.markDirty(); }, set16: (o, v) => { L[o - base] = v & 255; L[o - base + 1] = v >> 8; s.markDirty(); },
+      set8: (o, v) => { s.remember(L, o - base, 1); L[o - base] = v; s.markDirty(); }, set16: (o, v) => { s.remember(L, o - base, 2); L[o - base] = v & 255; L[o - base + 1] = v >> 8; s.markDirty(); },
       str: (o, n) => s.str(o - base, n, L), setStr: (o, n, v) => s.setStr(o - base, n, v, L),
     };
   }
