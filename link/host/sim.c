@@ -16,6 +16,8 @@
 // --slow MS         each page write takes MS milliseconds (to watch progress)
 // --abrupt-close    closing a connection discards unsent data, like the 3DS's network stack
 // --clock-shift S   the simulated 3DS's clock is S seconds ahead of this computer's (negative: behind)
+// --sd DIR          the simulated SD card (default sim-sd)
+// --console         read the console's own menu from stdin, one per line: backup, health, scan, restore N, stop
 
 #include "../source/core.h"
 
@@ -33,7 +35,7 @@ static const char *cardPath, *sdDir = "sim-sd";
 static enum { M45PE, PLAIN, EEPROM } kind = M45PE;
 static int flakyEvery, deafLeft, pullAt = -1, writes, slowMs;
 static long stuckPage = -1;
-static bool lowBattery, pulled, wel;
+static bool lowBattery, pulled, wel, consoleMenu;
 static uint64_t busyUntil;
 static char answer[8] = "yes";
 
@@ -86,21 +88,13 @@ bool plat_spi(const uint8_t *cmd, size_t cmdLen, uint8_t *rx, size_t rxLen, cons
   return true;
 }
 
-bool plat_save_backup(const char *name, const uint8_t *data, size_t n, char *path, size_t cap) {
-  mkdir(sdDir, 0755);
-  char dir[512]; snprintf(dir, sizeof dir, "%s/backups", sdDir); mkdir(dir, 0755);
-  snprintf(path, cap, "%s/%s", dir, name);
-  FILE *f = fopen(path, "wb");
-  if (!f) return false;
-  bool ok = fwrite(data, 1, n, f) == n;
-  ok = fclose(f) == 0 && ok;
-  if (!ok) return false;
-  uint8_t *back = malloc(n);
-  f = fopen(path, "rb");
-  ok = f && fread(back, 1, n, f) == n && !memcmp(back, data, n);
-  if (f) fclose(f);
-  free(back);
-  return ok;
+const char *plat_sd_root(void) { return sdDir; }
+// As the 3DS reports it: the wall-clock time the file was written, as if it were UTC.
+int64_t plat_mtime(const char *full) {
+  struct stat sb;
+  if (stat(full, &sb)) return 0;
+  struct tm tm; localtime_r(&sb.st_mtime, &tm);
+  return (int64_t)sb.st_mtime + tm.tm_gmtoff;
 }
 
 bool plat_power_ok(char *why, size_t cap) {
@@ -120,8 +114,13 @@ void plat_socket_opened(int fd) {
 
 bool plat_install_app(const uint8_t *d, size_t n, char *why, size_t cap) {
   char path[512];
-  if (!plat_save_backup("../LeafletLink.3dsx", d, n, path, sizeof path)) { snprintf(why, cap, "The update couldn't be written to the SD card."); return false; }
-  return true;
+  snprintf(path, sizeof path, "%s/3ds", sdDir); mkdir(sdDir, 0755); mkdir(path, 0755);
+  snprintf(path, sizeof path, "%s/3ds/LeafletLink.3dsx", sdDir);
+  FILE *f = fopen(path, "wb");
+  bool ok = f && fwrite(d, 1, n, f) == n;
+  if (f) ok = fclose(f) == 0 && ok;
+  if (!ok) snprintf(why, cap, "The update couldn't be written to the SD card.");
+  return ok;
 }
 static long clockShift;   // --clock-shift SECONDS: the simulated 3DS clock differs from this computer's
 void plat_clock(char *out, size_t cap) { time_t t = time(NULL) + clockShift; strftime(out, cap, "%Y-%m-%d %H:%M:%S", localtime(&t)); }
@@ -150,6 +149,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--clock-shift")) { clockShift = atol(v); i++; }
     else if (!strcmp(a, "--slow")) { slowMs = atoi(v); i++; }
     else if (!strcmp(a, "--sd")) { sdDir = v; i++; }
+    else if (!strcmp(a, "--console")) consoleMenu = true;
     else { fprintf(stderr, "unknown option %s\n", a); return 2; }
   }
   if (cardPath) {
@@ -160,7 +160,8 @@ int main(int argc, char **argv) {
   if (!ll_net_start()) { fprintf(stderr, "couldn't listen on port %d\n", LL_PORT); return 1; }
   printf("Leaflet Link simulator on http://localhost:%d  (chip %s)\n", LL_PORT, kind == M45PE ? "m45pe" : kind == PLAIN ? "plain" : "eeprom");
   fflush(stdout);
-  if (!strcmp(answer, "ask")) fcntl(0, F_SETFL, fcntl(0, F_GETFL, 0) | O_NONBLOCK);
+  if (!strcmp(answer, "ask") || consoleMenu) fcntl(0, F_SETFL, fcntl(0, F_GETFL, 0) | O_NONBLOCK);
+  char cmd[64]; size_t cmdLen = 0;
   LLState last = (LLState)-1;
   for (;;) {
     ll_net_poll();
@@ -172,11 +173,29 @@ int main(int argc, char **argv) {
       fflush(stdout);
       if (s->state == LL_DONE || s->state == LL_FAILED) flush_card();
     }
+    // The console's own menu, typed one command per line.
+    char c;
+    while (consoleMenu && read(0, &c, 1) == 1) {
+      if (c != '\n') { if (cmdLen + 1 < sizeof cmd) cmd[cmdLen++] = c; continue; }
+      cmd[cmdLen] = 0; cmdLen = 0;
+      char why[240] = "";
+      bool ok = true;
+      if (!strcmp(cmd, "backup")) ok = ll_start_backup(why, sizeof why);
+      else if (!strcmp(cmd, "health")) ok = ll_start_health(why, sizeof why);
+      else if (!strcmp(cmd, "stop")) ll_answer(false);
+      else if (!strcmp(cmd, "scan")) {
+        int n; const LLSaveFile *l = ll_sd_list(&n); ll_sd_scan(); l = ll_sd_list(&n);
+        for (int k = 0; k < n; k++) printf("save %d %s|%s|%s|%s|%s\n", k, l[k].path, l[k].town, l[k].residents, l[k].ok ? "ok" : "bad", l[k].backup ? "backup" : "game");
+        printf("saves %d\n", n);
+      } else if (!strncmp(cmd, "restore ", 8)) ok = ll_restore_from_sd(atoi(cmd + 8), why, sizeof why);
+      if (!ok) printf("refused: %s\n", why);
+      fflush(stdout);
+    }
     if (s->state == LL_CONFIRM) {
       if (!strcmp(answer, "yes")) ll_answer(true);
       else if (!strcmp(answer, "no")) ll_answer(false);
       else if (!strcmp(answer, "delay")) { if (plat_ms() - s->since > 4000) ll_answer(true); }
-      else { char c; if (read(0, &c, 1) == 1 && (c == 'y' || c == 'n')) ll_answer(c == 'y'); }
+      else if (!consoleMenu) { if (read(0, &c, 1) == 1 && (c == 'y' || c == 'n')) ll_answer(c == 'y'); }
     }
     usleep(s->state == LL_IDLE || s->state == LL_CONFIRM ? 5000 : 0);
   }

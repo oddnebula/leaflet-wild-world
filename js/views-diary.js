@@ -78,11 +78,12 @@
     const all = (await Backups.all()).filter(r => r.kind !== 'draft').sort((x, y) => x.when - y.when);
     cache = all; refresh();
   }
-  const KIND_WORD = { opened: 'Opened in Leaflet', saved: 'Saved by Leaflet', game: 'Saved by the game', manual: 'Backed up by hand' };
+  const KIND_WORD = { opened: 'Opened in Leaflet', saved: 'Saved by Leaflet', game: 'Saved by the game', manual: 'Backed up by hand', cartridge: '🎮 From your game card', sent: 'Sent to the game card' };
+  const kindWord = r => r.kind === 'game' && r.file === 'melonDS' ? '🖥️ Played on melonDS' : r.kind === 'game' && /^\//.test(r.file || '') ? '🎮 Saved on your 3DS' : r.kind === 'sent' && /^\//.test(r.file || '') ? 'Sent to your 3DS’s SD card' : KIND_WORD[r.kind] || r.kind;
 
   VIEWS.push({
     id: 'diary', group: 'Town', icon: '📔', noSave: true, title: () => 'Town Diary', sub: () => 'Your town’s story, told from its backups',
-    tips: ['Every time the game saves while Leaflet watches the file, a new chapter appears here.', 'Entries compare each backup with the one before it, so keep backups on to keep the diary going.'],
+    tips: ['Every time the game saves while Leaflet watches the file, a new chapter appears here.', 'Connect to your 3DS in Cartridge Sync and what you played on the real game card joins the diary too, including the backups Leaflet Link made on its own.', 'Entries compare each backup with the one before it, so keep backups on to keep the diary going.'],
     render(s, { refresh }) {
       if (!window.Backups) return [h('div', { class: 'card pad muted' }, 'Backups aren’t available here.')];
       if (!cache) { load(refresh); return [h('div', { class: 'card pad muted' }, 'Reading your backups…')]; }
@@ -105,7 +106,7 @@
           h('span', { class: 'muted', style: { fontSize: '12px' } }, `${snaps.length} version${snaps.length === 1 ? '' : 's'} since ${new Date(first.when).toLocaleDateString()}`),
           h('span', { class: 'spacer' }), h('button', { class: 'btn small', onclick: () => { cache = null; refresh(); } }, 'Refresh')),
         entries.length ? entries.map(({ r, lines }) => [
-          section(new Date(r.when).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), `${new Date(r.when).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${KIND_WORD[r.kind] || r.kind}`),
+          section(new Date(r.when).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), `${new Date(r.when).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${kindWord(r)}`),
           h('div', { class: 'card pad diary-day' }, lines.map(([em, text]) => h('div', { class: 'diary-line' }, h('span', { class: 'em' }, em), h('span', null, text))))])
           : h('div', { class: 'card' }, h('div', { class: 'empty-note' }, h('span', { class: 'em' }, '🌱'), snaps.length < 2 ? 'Only one version so far. Play a little and save, and the first entry will appear.' : 'Nothing has changed between the versions kept so far.')),
         h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px' } }, 'Built from the versions in Backups, oldest first. Deleting a backup merges its changes into the next entry.'),

@@ -1,5 +1,7 @@
 // Leaflet Link for 3DS: the console side of Cartridge Sync. It serves the Wild World game card's save to Leaflet on
 // the same Wi-Fi network, and writes a save from Leaflet back to the card after the person confirms on the console.
+// On its own it also backs the card up to the SD card, puts a backup (or a TWiLight Menu++ save) back on the card,
+// and checks the card's save chip.
 // Everything here is the 3DS layer (hardware access and the screens); the logic lives in core.c.
 #include <3ds.h>
 #include <citro2d.h>
@@ -17,7 +19,6 @@
 
 #define SOC_ALIGN 0x1000
 #define SOC_SIZE 0x100000
-#define BACKUP_DIR "sdmc:/3ds/LeafletLink/backups"
 
 // ---- platform -----------------------------------------------------------------------------------------------------
 bool plat_spi(const uint8_t *cmd, size_t cmdLen, uint8_t *rx, size_t rxLen, const uint8_t *tx, size_t txLen) {
@@ -52,24 +53,9 @@ void plat_card(LLCard *c) {
 
 uint64_t plat_ms(void) { return osGetTime(); }
 
-bool plat_save_backup(const char *name, const uint8_t *data, size_t n, char *path, size_t cap) {
-  mkdir("sdmc:/3ds", 0777); mkdir("sdmc:/3ds/LeafletLink", 0777); mkdir(BACKUP_DIR, 0777);
-  char full[256];
-  snprintf(full, sizeof full, "%s/%s", BACKUP_DIR, name);
-  snprintf(path, cap, "/3ds/LeafletLink/backups/%s", name);   // as people see it on the SD card
-  FILE *f = fopen(full, "wb");
-  if (!f) return false;
-  bool ok = fwrite(data, 1, n, f) == n;
-  ok = fclose(f) == 0 && ok;
-  if (!ok) return false;
-  u8 *back = malloc(n);
-  if (!back) return false;
-  f = fopen(full, "rb");
-  ok = f && fread(back, 1, n, f) == n && !memcmp(back, data, n);
-  if (f) fclose(f);
-  free(back);
-  return ok;
-}
+const char *plat_sd_root(void) { return "sdmc:"; }
+// The SD card's timestamps are the console's clock, like time() (seconds since 1970).
+int64_t plat_mtime(const char *full) { u64 t = 0; return R_SUCCEEDED(archive_getmtime(full, &t)) ? (int64_t)t : 0; }
 
 bool plat_power_ok(char *why, size_t cap) {
   u8 level = 5, charging = 0;
@@ -187,6 +173,11 @@ static void tick_mark(float cx, float cy, float r, u32 bg) {
   C2D_DrawLine(cx - r * 0.45f, cy + r * 0.02f, WHITE, cx - r * 0.1f, cy + r * 0.38f, WHITE, r * 0.22f, 0);
   C2D_DrawLine(cx - r * 0.1f, cy + r * 0.38f, WHITE, cx + r * 0.5f, cy - r * 0.35f, WHITE, r * 0.22f, 0);
 }
+static void bang_mark(float cx, float cy, float r, u32 bg) {
+  C2D_DrawCircleSolid(cx, cy, 0, r, bg);
+  C2D_DrawLine(cx, cy - r * 0.5f, WHITE, cx, cy + r * 0.12f, WHITE, r * 0.24f, 0);
+  C2D_DrawCircleSolid(cx, cy + r * 0.42f, 0, r * 0.13f, WHITE);
+}
 static void cross_mark(float cx, float cy, float r, u32 bg) {
   C2D_DrawCircleSolid(cx, cy, 0, r, bg);
   C2D_DrawLine(cx - r * 0.38f, cy - r * 0.38f, WHITE, cx + r * 0.38f, cy + r * 0.38f, WHITE, r * 0.22f, 0);
@@ -205,6 +196,39 @@ static void button(Box b, const char *label, u32 fill, u32 ink, bool pressed) {
 static char ipText[32];
 static bool wifiOk, netOk, pxiOk;
 static float anim;
+// The saves list (Y): open, waiting to look through the SD card, the selected row and the first row shown.
+static bool listOpen, listScan;
+static int sel, first;
+#define ROWS 4
+// A short message from the menu (why something couldn't start), shown for a few seconds.
+static char notice[240];
+static u64 noticeAt;
+static void note(const char *why) { snprintf(notice, sizeof notice, "%s", why); noticeAt = osGetTime(); }
+static bool noticing(void) { return notice[0] && osGetTime() - noticeAt < 8000; }
+
+static void when_text(int64_t t, char *out, size_t cap) {
+  if (!t) { snprintf(out, cap, "date unknown"); return; }
+  time_t tt = (time_t)t; struct tm tm; gmtime_r(&tt, &tm);
+  strftime(out, cap, "%b %d %Y, %H:%M", &tm);
+}
+static const char *file_name(const char *p) { const char *b = strrchr(p, '/'); return b ? b + 1 : p; }
+
+// Top screen while the saves list is open: everything about the selected save.
+static void list_details(void) {
+  int n; const LLSaveFile *l = ll_sd_list(&n);
+  if (listScan) { text("Looking through the SD card", 30, 136, 0.62f, INK, LEFT, 0); return; }
+  if (!n) {
+    text("No Wild World saves found", 30, 136, 0.62f, INK, LEFT, 0);
+    text("Back up your game card with X, or play Wild World through TWiLight Menu++ or a forwarder, and its save shows up here.", 30, 158, 0.46f, MUTED, LEFT, 340);
+    return;
+  }
+  const LLSaveFile *e = &l[sel];
+  char line[400], when[40];
+  when_text(e->mtime, when, sizeof when);
+  text(e->town, 30, 136, 0.62f, INK, LEFT, 0);
+  snprintf(line, sizeof line, "%s\n%s %s, %s version\n%s", e->residents[0] ? e->residents : "No residents yet", e->backup ? "Backed up" : "Saved", when, e->region == 0x8A ? "USA" : "European", e->ok ? e->path : "Damaged: it fails the game's own checks, so it can't go on the game card.");
+  text(line, 30, 158, 0.42f, e->ok ? MUTED : RED, LEFT, 340);
+}
 
 static void top_screen(void) {
   const LLStatus *s = ll_status();
@@ -242,6 +266,8 @@ static void top_screen(void) {
   text(net, 50, 100, 0.55f, INK, LEFT, 0);
 
   C2D_DrawRectSolid(30, 128, 0, 340, 1, GREY);
+  if (listOpen) { list_details(); return; }
+  if (s->state == LL_IDLE && noticing()) { text("Not now", 30, 136, 0.62f, INK, LEFT, 0); text(notice, 30, 158, 0.46f, RED, LEFT, 340); return; }
   text(s->title, 30, 136, 0.62f, INK, LEFT, 0);
   const char *body = s->message;
   if (s->state == LL_IDLE && !ready) body = why;
@@ -251,6 +277,35 @@ static void top_screen(void) {
 }
 
 static Box btnA = { 24, 172, 168, 44 }, btnB = { 204, 172, 92, 44 }, btnOK = { 96, 176, 128, 40 };
+// The menu (X, Y, R) and the saves list.
+static Box btnX = { 14, 144, 94, 46 }, btnY = { 113, 144, 94, 46 }, btnR = { 212, 144, 94, 46 };
+static Box btnPut = { 14, 196, 190, 36 }, btnBack = { 212, 196, 94, 36 }, btnStop = { 110, 172, 100, 40 };
+static Box row_box(int i) { return (Box){ 14, 34 + i * 40, 292, 38 }; }
+
+static void saves_list(bool touching, touchPosition tp) {
+  int n; const LLSaveFile *l = ll_sd_list(&n);
+  text("Saves on the SD card", 160, 8, 0.55f, INK, CENTER, 0);
+  if (listScan) { C2D_DrawCircleSolid(160, 110, 0, 6 + 3 * sinf(anim * 6), LEAF); text("Looking\xE2\x80\xA6", 160, 126, 0.5f, MUTED, CENTER, 0); }
+  else if (!n) { panel(14, 34, 292, 150, CARD); text("Nothing here yet.", 160, 90, 0.6f, MUTED, CENTER, 0); }
+  for (int i = 0; !listScan && i < ROWS && first + i < n; i++) {
+    const LLSaveFile *e = &l[first + i];
+    Box b = row_box(i);
+    bool on = first + i == sel;
+    rrect(b.x, b.y, b.w, b.h, 9, on ? C2D_Color32(0xEE, 0xF8, 0xE6, 0xFF) : CARD);
+    if (on) { rrect(b.x, b.y, 5, b.h, 2, LEAF); }
+    char when[40], line[240];
+    when_text(e->mtime, when, sizeof when);
+    float keep = textRight; textRight = 298;
+    text(e->town, b.x + 14, b.y + 3, 0.52f, e->ok ? INK : RED, LEFT, 0);
+    snprintf(line, sizeof line, "%s \xC2\xB7 %.150s", when, e->backup ? "Leaflet Link backup" : file_name(e->path));
+    text(line, b.x + 14, b.y + 21, 0.38f, MUTED, LEFT, 0);
+    textRight = keep;
+  }
+  if (n > ROWS) { float h = 156.0f * ROWS / n, y = 34 + 156.0f * first / n; rrect(308, y, 4, h, 2, GREY); }
+  bool can = !listScan && n && l[sel].ok;
+  button(btnPut, "\xEE\x80\x80 Put on game card", can ? LEAF : GREY, can ? WHITE : MUTED, touching && hit(btnPut, tp));
+  button(btnBack, "\xEE\x80\x81 Back", GREY, INK, touching && hit(btnBack, tp));
+}
 
 static void steps(int at) {
   const char *names[3] = { "Copy", "Save", "Check" };
@@ -268,7 +323,7 @@ static void bottom_screen(bool touching, touchPosition tp) {
   textMax = 276; textRight = 298;
   C2D_DrawRectSolid(0, 0, 0, 320, 240, PAPER);
   for (int y = 0; y < 240; y += 16) C2D_DrawRectSolid(0, y, 0, 320, 8, STRIPE);
-  char line[200];
+  char line[320];
   switch (s->state) {
     case LL_CONFIRM: if (s->update) {
       panel(14, 12, 292, 146, CARD);
@@ -284,10 +339,12 @@ static void bottom_screen(bool touching, touchPosition tp) {
     } else {
       panel(14, 12, 292, 146, CARD);
       leaf(160, 38, 30, 10, LEAF, LEAF_LIGHT);
-      text("Save this town to your game card?", 160, 56, 0.55f, MUTED, CENTER, 0);
+      text(s->kind == LL_JOB_SDFILE ? "Save this town to the SD card?" : s->source[0] ? "Put this town on your game card?" : "Save this town to your game card?", 160, 56, 0.55f, MUTED, CENTER, 0);
       text(s->town, 160, 76, 1.0f, INK, CENTER, 0);
       if (s->residents[0]) text(s->residents, 160, 106, 0.48f, MUTED, CENTER, 0);
-      snprintf(line, sizeof line, "Sent by Leaflet on %s", s->peer);
+      if (s->kind == LL_JOB_SDFILE) snprintf(line, sizeof line, "Into %s, from Leaflet on %s", file_name(s->target), s->peer);
+      else if (s->source[0]) snprintf(line, sizeof line, "From %s", s->source);
+      else snprintf(line, sizeof line, "Sent by Leaflet on %s", s->peer);
       text(line, 160, 128, 0.42f, MUTED, CENTER, 0);
       button(btnA, "\xEE\x80\x80 Save", LEAF, WHITE, touching && hit(btnA, tp));
       button(btnB, "\xEE\x80\x81 Cancel", GREY, INK, touching && hit(btnB, tp));
@@ -298,11 +355,27 @@ static void bottom_screen(bool touching, touchPosition tp) {
       text(s->title, 160, 34, 0.8f, INK, CENTER, 0);
       C2D_DrawCircleSolid(160, 90, 0, 6 + 3 * sinf(anim * 6), LEAF);
       break;
-    case LL_BACKUP: case LL_WRITING: case LL_VERIFYING: case LL_RESTORING: {
+    case LL_CHECKING: {
+      panel(14, 12, 292, 150, CARD);
+      text(s->title, 160, 26, 0.75f, INK, CENTER, 0);
+      text("Reading the save chip again and again to make sure it reads the same every time. Nothing is written.", 30, 54, 0.42f, MUTED, LEFT, 260);
+      rrect(34, 112, 252, 16, 8, GREY);
+      rrect(34, 112, fmaxf(16, 252 * s->progress), 16, 8, LEAF);
+      snprintf(line, sizeof line, "Read %d of 6", (int)(s->progress * 6) + 1 > 6 ? 6 : (int)(s->progress * 6) + 1);
+      text(line, 160, 136, 0.45f, MUTED, CENTER, 0);
+      button(btnStop, "\xEE\x80\x81 Stop", GREY, INK, touching && hit(btnStop, tp));
+      break;
+    }
+    case LL_BACKUP: case LL_WRITING: case LL_VERIFYING: case LL_RESTORING: if (s->kind == LL_JOB_BACKUP) {
+      panel(14, 12, 292, 120, CARD);
+      text(s->title, 160, 34, 0.8f, INK, CENTER, 0);
+      C2D_DrawCircleSolid(160, 90, 0, 6 + 3 * sinf(anim * 6), LEAF);
+      break;
+    } else {
       panel(14, 12, 292, 216, CARD);
       text(s->title, 160, 26, 0.8f, INK, CENTER, 0);
       if (s->state == LL_RESTORING) text("Something went wrong, so your original save is going back on.", 30, 56, 0.45f, RED, LEFT, 260);
-      else text("Don't turn off the power or take out the game card.", 30, 52, 0.45f, MUTED, LEFT, 260);
+      else text(s->kind == LL_JOB_SDFILE ? "Don't turn off the power or take out the SD card." : "Don't turn off the power or take out the game card.", 30, 52, 0.45f, MUTED, LEFT, 260);
       steps(s->state == LL_BACKUP ? 0 : s->state == LL_WRITING || s->state == LL_RESTORING ? 1 : 2);
       float p = s->state == LL_BACKUP ? 0.05f : s->state == LL_VERIFYING ? 0.92f : 0.08f + 0.8f * s->progress;
       rrect(34, 160, 252, 16, 8, GREY);
@@ -313,25 +386,30 @@ static void bottom_screen(bool touching, touchPosition tp) {
     case LL_DONE: case LL_FAILED: {
       panel(14, 12, 292, 150, CARD);
       bool good = s->state == LL_DONE;
-      if (good) tick_mark(160, 44, 20, LEAF); else if (s->restored) tick_mark(160, 44, 20, AMBER); else cross_mark(160, 44, 20, RED);
+      if (good && s->caution) bang_mark(160, 44, 20, AMBER); else if (good) tick_mark(160, 44, 20, LEAF); else if (s->restored) tick_mark(160, 44, 20, AMBER); else cross_mark(160, 44, 20, RED);
       text(s->title, 160, 70, 0.75f, INK, CENTER, 0);
       text(s->message, 28, 96, 0.4f, MUTED, LEFT, 264);
       button(btnOK, s->quit ? "\xEE\x80\x80 Close" : "\xEE\x80\x80 OK", good ? LEAF : GREY, good ? WHITE : INK, touching && hit(btnOK, tp));
       break;
     }
     default: {
-      panel(14, 12, 292, 160, CARD);
+      if (listOpen) { saves_list(touching, tp); break; }
+      panel(14, 10, 292, 124, CARD);
       if (netOk) {
-        text("On your computer, open Leaflet,", 160, 24, 0.5f, MUTED, CENTER, 0);
-        text("choose Cartridge Sync and type:", 160, 42, 0.5f, MUTED, CENTER, 0);
-        rrect(34, 66, 252, 52, 14, C2D_Color32(0xEE, 0xF8, 0xE6, 0xFF));
-        text(ipText, 160, 76, 1.05f, LEAF, CENTER, 0);
-        text("Use the same Wi-Fi as your computer.", 160, 130, 0.42f, MUTED, CENTER, 0);
-        text("Saves are only written after you press \xEE\x80\x80 here.", 160, 148, 0.42f, MUTED, CENTER, 0);
+        text("On your computer, open Leaflet,", 160, 18, 0.48f, MUTED, CENTER, 0);
+        text("choose Cartridge Sync and type:", 160, 34, 0.48f, MUTED, CENTER, 0);
+        rrect(34, 56, 252, 46, 14, C2D_Color32(0xEE, 0xF8, 0xE6, 0xFF));
+        text(ipText, 160, 63, 1.0f, LEAF, CENTER, 0);
+        text("Saves are only written after you press \xEE\x80\x80 here.", 160, 110, 0.42f, MUTED, CENTER, 0);
       } else {
-        text("Waiting for Wi-Fi", 160, 60, 0.8f, INK, CENTER, 0);
-        text("Connect the 3DS to the same network as your computer.", 30, 96, 0.45f, MUTED, LEFT, 260);
+        text("Waiting for Wi-Fi", 160, 30, 0.75f, INK, CENTER, 0);
+        text("To use Leaflet, connect the 3DS to the same network as your computer. The buttons below work without it.", 30, 62, 0.42f, MUTED, LEFT, 260);
       }
+      char why[8];
+      bool ready = ll_card_ready(why, sizeof why) && ll_chip()->writable;
+      button(btnX, "\xEE\x80\x82 Back up", ready ? LEAF : GREY, ready ? WHITE : MUTED, touching && hit(btnX, tp));
+      button(btnY, "\xEE\x80\x83 Saves", WHITE, INK, touching && hit(btnY, tp));
+      button(btnR, "\xEE\x80\x85 Check", ready ? WHITE : GREY, ready ? INK : MUTED, touching && hit(btnR, tp));
       text("START: quit", 160, 212, 0.42f, MUTED, CENTER, 0);
     }
   }
@@ -373,15 +451,40 @@ int main(int argc, char **argv) {
     bool touching = held & KEY_TOUCH;
     if (touching) lastTouch = tp;
     const LLStatus *s = ll_status();
-    bool busy = s->state == LL_BACKUP || s->state == LL_WRITING || s->state == LL_VERIFYING || s->state == LL_RESTORING || s->state == LL_UPDATING;
+    // A press acts only on the screen it was made on: what's on screen now. (Picking a save from the list puts a
+    // confirmation up; the same A must not also answer it.)
+    const LLState now = s->state;
+    bool busy = now == LL_BACKUP || now == LL_WRITING || now == LL_VERIFYING || now == LL_RESTORING || now == LL_UPDATING;
 
-    if ((down & KEY_START) && !busy && s->state != LL_CONFIRM) break;
-    if (s->state == LL_CONFIRM) {
-      if ((down & KEY_A) || ((up & KEY_TOUCH) && hit(btnA, lastTouch))) ll_answer(true);
-      else if ((down & KEY_B) || ((up & KEY_TOUCH) && hit(btnB, lastTouch))) ll_answer(false);
-    } else if (s->state == LL_DONE || s->state == LL_FAILED) {
-      if ((down & KEY_A) || ((up & KEY_TOUCH) && hit(btnOK, lastTouch))) { if (s->quit) break; ll_answer(true); }
+    bool tapped = (up & KEY_TOUCH) != 0;
+    if ((down & KEY_START) && !busy && now != LL_CONFIRM && now != LL_CHECKING) break;
+    char why[240];
+    if (now == LL_IDLE && listOpen) {
+      int n; const LLSaveFile *l = ll_sd_list(&n);
+      if (listScan) { /* drawn once, then looked through below */ }
+      else if ((down & KEY_B) || (tapped && hit(btnBack, lastTouch))) listOpen = false;
+      else {
+        if ((down & KEY_DOWN) && sel + 1 < n) sel++;
+        if ((down & KEY_UP) && sel > 0) sel--;
+        bool pick = (down & KEY_A) || (tapped && hit(btnPut, lastTouch));
+        for (int i = 0; tapped && i < ROWS && first + i < n; i++) if (hit(row_box(i), lastTouch)) { pick = sel == first + i; sel = first + i; }
+        if (sel < first) first = sel;
+        if (sel >= first + ROWS) first = sel - ROWS + 1;
+        if (pick && n && l[sel].ok) { if (ll_restore_from_sd(sel, why, sizeof why)) listOpen = false; else { listOpen = false; note(why); } }
+      }
+    } else if (now == LL_IDLE) {
+      if ((down & KEY_X) || (tapped && hit(btnX, lastTouch))) { if (!ll_start_backup(why, sizeof why)) note(why); }
+      else if ((down & KEY_R) || (tapped && hit(btnR, lastTouch))) { if (!ll_start_health(why, sizeof why)) note(why); }
+      else if ((down & KEY_Y) || (tapped && hit(btnY, lastTouch))) { listOpen = listScan = true; sel = first = 0; notice[0] = 0; }
+    } else if (now == LL_CHECKING) {
+      if ((down & KEY_B) || (tapped && hit(btnStop, lastTouch))) ll_answer(false);
+    } else if (now == LL_CONFIRM) {
+      if ((down & KEY_A) || (tapped && hit(btnA, lastTouch))) ll_answer(true);
+      else if ((down & KEY_B) || (tapped && hit(btnB, lastTouch))) ll_answer(false);
+    } else if (now == LL_DONE || now == LL_FAILED) {
+      if ((down & KEY_A) || (tapped && hit(btnOK, lastTouch))) { if (s->quit) break; ll_answer(true); }
     }
+    if (s->state != LL_IDLE) listOpen = false;
 
     if (pxiOk) { ll_net_poll(); ll_tick(); }
     if (osGetTime() - lastNet > 2000) {
@@ -399,6 +502,8 @@ int main(int argc, char **argv) {
     C2D_SceneBegin(bot);
     bottom_screen(touching, tp);
     C3D_FrameEnd(0);
+    // Looking through the SD card takes a moment, so it starts after the "Looking" screen has been drawn once.
+    if (listScan) { ll_sd_scan(); listScan = false; }
   }
 
   plat_hold(false);

@@ -63,6 +63,9 @@ A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon
   address doesn't have to be typed.
 - ✅ **Wireless install and updates of Leaflet Link, friend codes kept on emulators, and Play on melonDS** with
   sessions that survive restarts and send the town back to the card.
+- ✅ **Console tools (Leaflet Link 1.3).** Back up and restore on the 3DS alone, a read-only health check of the save
+  chip, TWiLight Menu++ and forwarder saves on the 3DS's SD card, the Town Diary fed by real play, and Play on melonDS
+  for Windows through Leaflet Helper. Next: find the 3DS automatically, a pairing PIN, and DeSmuME.
 - **Villager trading (M).** Export a neighbor (the 0x700-byte record) as a file and import into another save,
   the way the game moves villagers between towns.
 - **Item gifting between saves (S).** Copy items or patterns from one save to another with drag and drop.

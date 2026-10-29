@@ -1,5 +1,6 @@
 // Finds Wild World saves on SD cards and other folders: flashcarts such as the R4 keep each game's save next to it
-// on the microSD card (the same name ending in .sav, sometimes padded to 512 KB).
+// on the microSD card (the same name ending in .sav, sometimes padded to 512 KB); TWiLight Menu++ on a 3DS's SD card
+// keeps it in a "saves" folder beside the game.
 import Foundation
 
 enum SaveFinder {
@@ -23,7 +24,8 @@ enum SaveFinder {
                 if walk.level > 6 { walk.skipDescendants(); continue }
                 looked += 1
                 if looked > 20000 || results.count >= 60 { break }
-                guard ["sav", "dsv", "bin"].contains(url.pathExtension.lowercased()),
+                let ext = url.pathExtension.lowercased()   // .sav1 to .sav9: nds-bootstrap's extra save slots (TWiLight Menu++)
+                guard ["sav", "dsv", "bin"].contains(ext) || ext.range(of: #"^sav[1-9]$"#, options: .regularExpression) != nil,
                       let v = try? url.resourceValues(forKeys: keys), v.isRegularFile == true,
                       let size = v.fileSize, size >= 0x40000, size <= 0x100000,
                       let data = try? Data(contentsOf: url),

@@ -55,9 +55,12 @@ your own Wi-Fi network.
   up homebrew or link to tools that do.
 - It talks only to Leaflet on your local network. Nothing is sent to the internet.
 - **Play on melonDS** uses a ROM backup that you choose, which must be one you made from your own game card. Leaflet
-  keeps a copy of it only in its own play folder on your Mac (`~/Library/Application Support/Leaflet/Play`, which
-  isn't synced to iCloud) so the emulator can keep its save next to it. Leaflet never uploads, shares or
-  downloads ROMs, and Leaflet Link can't read or copy the game from a game card.
+  keeps a copy of it only in its own play folder on your computer (`~/Library/Application Support/Leaflet/Play` on a
+  Mac, which isn't synced to iCloud; `%LOCALAPPDATA%\Leaflet\Play` on Windows, which isn't synced to OneDrive) so the
+  emulator can keep its save next to it. Leaflet never uploads, shares or downloads ROMs, and Leaflet Link can't read
+  or copy the game from a game card.
+- Leaflet Link also lists save files already on your 3DS's SD card, such as those TWiLight Menu++ makes, and reads or
+  writes only those **saves**. It never reads, lists or copies the games (`.nds` files) themselves.
 - Keeping a friend code on an emulator copies your town's own Nintendo WFC ID (from your save) into your emulator's
   settings. Nintendo Wi-Fi Connection closed in 2014; replacement services such as Wiimmfi are run by others, have
   their own rules, and aren't connected to this project.

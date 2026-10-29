@@ -12,6 +12,8 @@ rm -rf "$WIN" && mkdir -p "$WIN/app"
 cp index.html "$WIN/app/" && cp -R css js "$WIN/app/"
 # Windows wants CRLF line endings in batch files.
 sed 's/$/\r/' "windows/Start Leaflet.cmd" > "$WIN/Start Leaflet.cmd"
+# Leaflet Helper: Play on melonDS and the rest of Cartridge Sync's computer side (Start Leaflet runs it).
+sed 's/$/\r/' "windows/Leaflet Helper.ps1" > "$WIN/app/Leaflet Helper.ps1"
 # Leaflet Link and its wireless installer (Cartridge Sync).
 if [[ -f link/LeafletLink.3dsx ]]; then
   cp link/LeafletLink.3dsx "$WIN/app/"

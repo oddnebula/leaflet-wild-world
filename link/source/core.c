@@ -14,7 +14,11 @@
 //  6. When every page is written, the whole cartridge is read back and compared byte for byte (twice).
 //  7. If any of that fails, the original save is written back and checked the same way, and the console and Leaflet
 //     say exactly what happened. The copy on the SD card stays either way.
+// A save from the SD card (a backup, or a TWiLight Menu++ save) goes through exactly the same steps. Writing a game's
+// save file on the SD card keeps a copy of the old file first, writes the new one beside it, reads it back, and only
+// then swaps it in.
 #include "core.h"
+#include "chars.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -25,15 +29,20 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+#include <time.h>
+#include <dirent.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 // ---- save layout (matches js/save.js) -----------------------------------------------------------------------------
 #define BLOCK 0x15FE0
 #define COPY2 0x15FE0
 #define LETTERS 0x2E20C
 #define LETTERS_SIZE 0x11DF4
+#define PLAYER 0xC
+#define PLAYER_SIZE 0x228C
 
 static uint16_t sum16(const uint8_t *d, size_t off, size_t len) {
   uint32_t s = 0;
@@ -68,6 +77,34 @@ int ll_save_region(const uint8_t *d) {
   if (copy_ok(d, COPY2)) return d[COPY2];
   if (copy_ok(d, 0)) return d[0];
   return 0;
+}
+
+static void decode(const uint8_t *d, size_t n, char *out, size_t cap) {
+  size_t k = 0;
+  out[0] = 0;
+  for (size_t i = 0; i < n && d[i]; i++) {
+    const char *c = LL_CHARS[d[i]];
+    size_t l = strlen(c);
+    if (k + l + 1 > cap) break;
+    memcpy(out + k, c, l); k += l;
+  }
+  out[k] = 0;
+  while (k && out[k - 1] == ' ') out[--k] = 0;
+}
+
+void ll_describe(const uint8_t *d, char *town, size_t townCap, char *residents, size_t resCap) {
+  size_t at = copy_ok(d, 0) ? 0 : COPY2;
+  decode(d + at + 4, 8, town, townCap);
+  if (!town[0]) snprintf(town, townCap, "a town");
+  residents[0] = 0;
+  for (int p = 0; p < 4; p++) {
+    size_t b = at + PLAYER + p * PLAYER_SIZE;
+    uint16_t id = d[b + 0x2280] | (d[b + 0x2281] << 8);
+    if (!id || id == 0xFFFF) continue;
+    char name[40]; decode(d + b + 0x2282, 8, name, sizeof name);
+    size_t k = strlen(residents);
+    snprintf(residents + k, resCap - k, "%s%s", k ? ", " : "", name);
+  }
 }
 
 int ll_check_save(const uint8_t *d, char *why, size_t cap) {
@@ -159,8 +196,8 @@ static bool write_page(uint32_t a, const uint8_t *target) {
 static LLStatus st;
 static LLCard card;
 static uint64_t cardSeen;
-static uint8_t *incoming, *original, *scratch, *scratch2, *app;
-static size_t appLen;
+static uint8_t *incoming, *original, *scratch, *scratch2, *app, *filebuf, *sdOld;
+static size_t appLen, sdOldLen;
 static uint16_t todo[LL_PAGES];
 static int todoN, todoAt, verifyPasses;
 static bool restoring, checking;   // putting the original back / reading back after writing
@@ -176,6 +213,62 @@ static void set_state(LLState s, const char *title, const char *fmt, ...) {
   va_list ap; va_start(ap, fmt); vsnprintf(st.message, sizeof st.message, fmt, ap); va_end(ap);
   plat_hold(s == LL_BACKUP || s == LL_WRITING || s == LL_VERIFYING || s == LL_RESTORING || s == LL_UPDATING);
 }
+static bool free_for_job(void) { return st.state == LL_IDLE || st.state == LL_DONE || st.state == LL_FAILED; }
+// Starts a new job's status from scratch.
+static void new_job(LLJob kind, uint32_t job, const char *peer) {
+  st.kind = kind; st.job = job; st.changed = st.written = 0;
+  st.restored = st.update = st.quit = st.caution = false;
+  st.backup[0] = st.version[0] = st.town[0] = st.residents[0] = st.source[0] = st.target[0] = 0;
+  snprintf(st.peer, sizeof st.peer, "%s", peer ? peer : "");
+}
+
+// ---- files on the SD card -----------------------------------------------------------------------------------------
+static void full_path(char *out, size_t cap, const char *rel) { snprintf(out, cap, "%s%s", plat_sd_root(), rel); }
+// Creates each folder of rel (from the SD card's root) that doesn't exist yet.
+static void make_dirs(const char *rel) {
+  char p[300];
+  full_path(p, sizeof p, rel);
+  for (char *c = p + strlen(plat_sd_root()); *c; c++) if (*c == '/') { *c = 0; mkdir(p, 0777); *c = '/'; }
+  mkdir(p, 0777);
+}
+static bool read_file(const char *full, uint8_t *d, size_t cap, size_t *n) {
+  FILE *f = fopen(full, "rb");
+  if (!f) return false;
+  *n = fread(d, 1, cap, f);
+  bool more = fgetc(f) != EOF;
+  fclose(f);
+  return !more;
+}
+// The file holds exactly these n bytes.
+static bool file_is(const char *full, const uint8_t *d, size_t n) {
+  FILE *f = fopen(full, "rb");
+  if (!f) return false;
+  uint8_t buf[0x1000];
+  size_t at = 0, k;
+  bool ok = true;
+  while (ok && (k = fread(buf, 1, sizeof buf, f)) > 0) { ok = at + k <= n && !memcmp(buf, d + at, k); at += k; }
+  fclose(f);
+  return ok && at == n;
+}
+// Writes a file and reads it back to check every byte.
+static bool write_checked(const char *full, const uint8_t *d, size_t n) {
+  FILE *f = fopen(full, "wb");
+  if (!f) return false;
+  bool ok = fwrite(d, 1, n, f) == n;
+  ok = fclose(f) == 0 && ok;
+  return ok && file_is(full, d, n);
+}
+// Keeps a copy in Leaflet Link's backups folder; st.backup gets its path as people see it on the SD card.
+static bool keep_backup(const char *what, const uint8_t *d, size_t n) {
+  char stamp[40], rel[200], full[300];
+  plat_stamp(stamp, sizeof stamp);
+  make_dirs(LL_BACKUP_DIR);
+  snprintf(rel, sizeof rel, "%s/%s %s.sav", LL_BACKUP_DIR, stamp, what);
+  full_path(full, sizeof full, rel);
+  snprintf(st.backup, sizeof st.backup, "%s", rel);
+  return write_checked(full, d, n);
+}
+static const char *base_name(const char *path) { const char *b = strrchr(path, '/'); return b ? b + 1 : path; }
 
 static void refresh_card(bool force) {
   if (!force && plat_ms() - cardSeen < 500) return;
@@ -212,13 +305,15 @@ static bool read_stable(uint8_t *dst) {
 
 void ll_init(void) {
   incoming = malloc(LL_SAVE_SIZE); original = malloc(LL_SAVE_SIZE); scratch = malloc(LL_SAVE_SIZE); scratch2 = malloc(LL_SAVE_SIZE);
+  filebuf = malloc(LL_SAVE_SIZE);
   set_state(LL_IDLE, "Ready", "Waiting for Leaflet.");
   refresh_card(true);
 }
 
 // A save arrived from Leaflet. Returns 0 and waits for the person, or an HTTP status with the reason in why.
-static int stage(const uint8_t *body, size_t n, uint32_t crc, const char *town, const char *residents, uint32_t job, const char *peer, char *why, size_t cap) {
-  if (st.state != LL_IDLE && st.state != LL_DONE && st.state != LL_FAILED) { say(why, cap, "Leaflet Link is busy with another save. Finish that one on the 3DS first."); return 409; }
+// source: where it comes from when it isn't Leaflet (a file on the SD card), else NULL.
+static int stage(const uint8_t *body, size_t n, uint32_t crc, const char *town, const char *residents, uint32_t job, const char *peer, const char *source, char *why, size_t cap) {
+  if (!free_for_job()) { say(why, cap, "Leaflet Link is busy with another save. Finish that one on the 3DS first."); return 409; }
   if (n != LL_SAVE_SIZE) { say(why, cap, "The save must be exactly 256 KB (got %u bytes).", (unsigned)n); return 400; }
   if (ll_crc32(body, n) != crc) { say(why, cap, "The save was damaged on its way over Wi-Fi (its CRC didn't match). Nothing was written; send it again."); return 400; }
   if (ll_check_save(body, why, cap)) return 422;
@@ -227,25 +322,27 @@ static int stage(const uint8_t *body, size_t n, uint32_t crc, const char *town, 
   if (!chip.writable) { say(why, cap, "%s", chip.why); return 409; }
   memcpy(incoming, body, n);
   memcpy(jobCode, card.code, sizeof jobCode);
+  new_job(LL_JOB_CARD, job, peer);
   snprintf(st.town, sizeof st.town, "%s", town[0] ? town : "your town");
   snprintf(st.residents, sizeof st.residents, "%s", residents);
-  snprintf(st.peer, sizeof st.peer, "%s", peer);
-  st.job = job; st.changed = st.written = 0; st.restored = st.update = st.quit = false; st.backup[0] = st.version[0] = 0;
-  set_state(LL_CONFIRM, "Save to your game card?", "Leaflet on %s wants to save %s to this game card. Press A to save it, or B to cancel.", peer, st.town);
+  if (source) {
+    snprintf(st.source, sizeof st.source, "%s", source);
+    set_state(LL_CONFIRM, "Save to your game card?", "Put %s from %s on this game card? Press A to save it, or B to cancel.", st.town, source);
+  } else set_state(LL_CONFIRM, "Save to your game card?", "Leaflet on %s wants to save %s to this game card. Press A to save it, or B to cancel.", peer, st.town);
   return 0;
 }
 
 // A new Leaflet Link arrived from Leaflet. Same rules as a save: checked first, then the person decides.
 static int stage_update(const uint8_t *body, size_t n, uint32_t crc, const char *version, uint32_t job, const char *peer, char *why, size_t cap) {
-  if (st.state != LL_IDLE && st.state != LL_DONE && st.state != LL_FAILED) { say(why, cap, "Leaflet Link is busy. Finish on the 3DS first."); return 409; }
+  if (!free_for_job()) { say(why, cap, "Leaflet Link is busy. Finish on the 3DS first."); return 409; }
   if (n < 0x1000 || n > LL_APP_MAX || memcmp(body, "3DSX", 4)) { say(why, cap, "That isn't a 3DS homebrew app (.3dsx)."); return 400; }
   if (ll_crc32(body, n) != crc) { say(why, cap, "The update was damaged on its way over Wi-Fi (its CRC didn't match). Nothing was changed; try again."); return 400; }
   if (!app) app = malloc(LL_APP_MAX);
   if (!app) { say(why, cap, "Not enough memory for the update."); return 500; }
   memcpy(app, body, n); appLen = n;
+  new_job(LL_JOB_UPDATE, job, peer);
+  st.update = true;
   snprintf(st.version, sizeof st.version, "%s", version[0] ? version : "?");
-  snprintf(st.peer, sizeof st.peer, "%s", peer);
-  st.job = job; st.update = true; st.quit = false; st.restored = false; st.backup[0] = 0; st.town[0] = st.residents[0] = 0;
   set_state(LL_CONFIRM, "Update Leaflet Link?", "Leaflet on %s wants to update Leaflet Link from %s to %s. Press A to update, or B to cancel.", peer, LL_VERSION, st.version);
   return 0;
 }
@@ -258,6 +355,302 @@ static void step_update(void) {
   } else set_state(LL_FAILED, "Not updated", "%s This version of Leaflet Link is still installed and works as before.", why);
 }
 
+static bool card_still_there(void);
+
+// ---- the console's own Back up -------------------------------------------------------------------------------------
+bool ll_start_backup(char *why, size_t cap) {
+  if (!free_for_job()) { say(why, cap, "Leaflet Link is busy. Finish on the 3DS first."); return false; }
+  refresh_card(true);
+  if (!ll_card_ready(why, cap)) return false;
+  memcpy(jobCode, card.code, sizeof jobCode);
+  new_job(LL_JOB_BACKUP, 0, NULL);
+  set_state(LL_BACKUP, "Backing up", "Reading the game card and copying its save to the SD card.");
+  return true;
+}
+
+static void step_card_backup(void) {
+  char why[160];
+  if (!card_still_there() || !ll_card_ready(why, sizeof why)) { set_state(LL_FAILED, "Not backed up", "The game card was taken out. Nothing was changed."); return; }
+  if (!read_stable(original)) { set_state(LL_FAILED, "Not backed up", "The game card couldn't be read reliably (two reads never agreed). Clean the game card's contacts and try again. Nothing was changed."); return; }
+  if (ll_save_blank(original)) { set_state(LL_FAILED, "Nothing to back up", "This game card has never been saved, so there's no town on it yet."); return; }
+  ll_describe(original, st.town, sizeof st.town, st.residents, sizeof st.residents);
+  char name[40];
+  snprintf(name, sizeof name, "%s backup", card.code);
+  if (!keep_backup(name, original, LL_SAVE_SIZE)) { set_state(LL_FAILED, "Not backed up", "The copy couldn't be written to the SD card (is it full or locked?). The game card wasn't changed."); return; }
+  if (ll_check_save(original, why, sizeof why)) {
+    st.caution = true;
+    set_state(LL_DONE, "Backed up, with a warning", "The save is copied to %s exactly as it is on the card, but %s Open it in Leaflet's Save Doctor for a closer look.", st.backup, why);
+  } else set_state(LL_DONE, "Backed up!", "%s is copied to the SD card and checked byte for byte: %s. Press Y to see your backups and put one back.", st.town, st.backup);
+}
+
+// ---- health check -------------------------------------------------------------------------------------------------
+// Reads the whole save chip HEALTH_PASSES times, comparing every 4 KB area with the first read. A healthy card reads
+// the same every time; a dirty contact flips a bit now and then. It never writes.
+#define HEALTH_PASSES 6
+static LLHealth health;
+static struct { int pass; uint32_t at; uint64_t t0, unstable; } hc;
+const LLHealth *ll_health(void) { return &health; }
+
+bool ll_start_health(char *why, size_t cap) {
+  if (!free_for_job()) { say(why, cap, "Leaflet Link is busy. Finish on the 3DS first."); return false; }
+  refresh_card(true);
+  if (!ll_card_ready(why, cap)) return false;
+  if (!chip.writable) { say(why, cap, "%s", chip.why); return false; }
+  memcpy(jobCode, card.code, sizeof jobCode);
+  new_job(LL_JOB_HEALTH, 0, NULL);
+  memset(&health, 0, sizeof health); memset(&hc, 0, sizeof hc);
+  health.idStable = true; hc.t0 = plat_ms();
+  set_state(LL_CHECKING, "Checking the game card", "Reading the save chip %d times and comparing every byte. Nothing is written.", HEALTH_PASSES);
+  return true;
+}
+
+static int bits(uint8_t x) { int n = 0; while (x) { n += x & 1; x >>= 1; } return n; }
+
+static void health_done(void) {
+  health.ms = (uint32_t)(plat_ms() - hc.t0);
+  for (int i = 0; i < 64; i++) if (hc.unstable >> i & 1) health.unstable++;
+  // Judge the save on an agreed copy when some reads differed.
+  bool readable = !health.unstable || read_stable(scratch);
+  health.blank = readable && ll_save_blank(scratch);
+  health.check = readable ? (health.blank ? 0 : ll_check_save(scratch, health.checkWhy, sizeof health.checkWhy)) : -1;
+  if (readable && !health.blank) ll_describe(scratch, st.town, sizeof st.town, st.residents, sizeof st.residents);
+  char chipLine[120] = "";
+  if (!health.idStable) snprintf(chipLine, sizeof chipLine, " The chip's ID also changed between reads.");
+  if (health.unstable || !health.idStable) {
+    st.caution = true;
+    set_state(LL_DONE, "Reads didn't always match",
+      "%d of 64 areas read differently at least once (%d bit%s in all, the first at 0x%05X).%s That's usually dust on the game card's contacts: clean them gently and check again. Saving stays safe, because Leaflet Link reads until two reads agree and checks every write, but it may need more tries.",
+      health.unstable, health.flips, health.flips == 1 ? "" : "s", (unsigned)health.firstBad, chipLine);
+  } else if (health.blank) {
+    set_state(LL_DONE, "Healthy, and empty", "The save chip read the same all %d times. This game card has never been saved, so there's no town on it yet.", health.passes);
+  } else if (health.check) {
+    st.caution = true;
+    set_state(LL_DONE, "The chip is fine; the save isn't", "Every read matched, so the save chip is healthy, but %s Open the town in Leaflet's Save Doctor for a closer look.", health.checkWhy);
+  } else {
+    set_state(LL_DONE, "Your game card is healthy", "The save chip read the same all %d times, byte for byte, and both copies of %s and the town hall letters pass their checksums.", health.passes, st.town);
+  }
+}
+
+static void step_health(void) {
+  if (!card_still_there()) { set_state(LL_FAILED, "Check stopped", "The game card was taken out. Nothing was changed."); return; }
+  uint64_t until = plat_ms() + 20;
+  while (plat_ms() < until) {
+    if (hc.at == 0) {   // each pass starts by asking the chip for its ID again
+      uint8_t c = CMD_RDID, id[3];
+      if (!plat_spi(&c, 1, id, 3, NULL, 0)) { set_state(LL_FAILED, "Check stopped", "The console couldn't reach the save chip. Take the game card out, put it back in and try again."); return; }
+      if (memcmp(id, chip.id, 3)) health.idStable = false;
+    }
+    uint8_t *dst = hc.pass ? scratch2 : scratch + hc.at;
+    if (!chip_read(hc.at, dst, 0x1000)) { set_state(LL_FAILED, "Check stopped", "The console couldn't read the save chip. Take the game card out, put it back in and try again."); return; }
+    if (hc.pass) {
+      int flips = 0;
+      for (int i = 0; i < 0x1000; i++) flips += bits(dst[i] ^ scratch[hc.at + i]);
+      if (flips) { if (!health.flips || hc.at < health.firstBad) health.firstBad = hc.at; hc.unstable |= 1ULL << (hc.at / 0x1000); health.flips += flips; }
+    }
+    hc.at += 0x1000;
+    if (hc.at == LL_SAVE_SIZE) { hc.at = 0; health.passes = ++hc.pass; if (hc.pass == HEALTH_PASSES) { health_done(); return; } }
+  }
+  st.progress = (hc.pass * (float)LL_SAVE_SIZE + hc.at) / ((float)LL_SAVE_SIZE * HEALTH_PASSES);
+}
+
+// ---- saves on the SD card -----------------------------------------------------------------------------------------
+// Leaflet Link's own backups, and the save files DS homebrew loaders keep next to the game: TWiLight Menu++ and
+// nds-bootstrap (and the forwarders made for them) use a "saves" folder beside the .nds, or the same folder.
+static LLSaveFile sdList[LL_SD_MAX];
+static int sdN, sdVisited;
+
+const LLSaveFile *ll_sd_list(int *n) { *n = sdN; return sdList; }
+
+static int64_t days_from_civil(int y, int m, int d) {
+  y -= m <= 2;
+  int64_t era = (y >= 0 ? y : y - 399) / 400;
+  int yoe = (int)(y - era * 400), doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1, doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+// "2026-10-28 14.03.22 ..." at the start of a backup's name, as seconds.
+static int64_t stamp_time(const char *name) {
+  int y, mo, d, h, mi, se;
+  if (sscanf(name, "%4d-%2d-%2d %2d.%2d.%2d", &y, &mo, &d, &h, &mi, &se) != 6) return 0;
+  return days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se;
+}
+
+static bool is_save_name(const char *n) {
+  const char *dot = strrchr(n, '.');
+  if (!dot) return false;
+  if (!strcasecmp(dot, ".sav")) return true;
+  return !strncasecmp(dot, ".sav", 4) && dot[4] >= '1' && dot[4] <= '9' && !dot[5];   // nds-bootstrap's extra save slots
+}
+
+static void sd_consider(const char *rel, bool backup, int64_t size) {
+  if (sdN >= LL_SD_MAX || size < LL_SAVE_SIZE || size > LL_FILE_MAX) return;
+  char full[300];
+  full_path(full, sizeof full, rel);
+  FILE *f = fopen(full, "rb");
+  if (!f) return;
+  // Most saves aren't Wild World's: look at the two bytes that say which region each copy of the town is first.
+  uint8_t r0 = 0, r1 = 0;
+  bool maybe = fread(&r0, 1, 1, f) == 1 && fseek(f, COPY2, SEEK_SET) == 0 && fread(&r1, 1, 1, f) == 1 && (r0 == 0x8A || r0 == 0xC5 || r1 == 0x8A || r1 == 0xC5);
+  bool whole = maybe && fseek(f, 0, SEEK_SET) == 0 && fread(filebuf, 1, LL_SAVE_SIZE, f) == LL_SAVE_SIZE;
+  fclose(f);
+  if (!whole) return;
+  int region = ll_save_region(filebuf);
+  if (!region) return;
+  LLSaveFile *e = &sdList[sdN++];
+  memset(e, 0, sizeof *e);
+  snprintf(e->path, sizeof e->path, "%s", rel);
+  e->size = (uint32_t)size; e->region = (uint8_t)region; e->backup = backup;
+  char why[8];
+  e->ok = !ll_check_save(filebuf, why, sizeof why);
+  ll_describe(filebuf, e->town, sizeof e->town, e->residents, sizeof e->residents);
+  e->mtime = backup ? stamp_time(base_name(rel)) : 0;
+  if (!e->mtime) e->mtime = plat_mtime(full);
+}
+
+// Folders at the SD card's root that never hold DS saves (or hold far too many files to look through).
+static const char *SKIP[] = { "Nintendo 3DS", "3ds", "DCIM", "luma", "gm9", "private", "Nintendo DSiWare", "cias", "Themes", NULL };
+
+static void sd_walk(char *rel, size_t len, int depth) {
+  char full[300];
+  full_path(full, sizeof full, len ? rel : "/");
+  DIR *d = opendir(full);
+  if (!d) return;
+  struct dirent *de;
+  while ((de = readdir(d)) && sdN < LL_SD_MAX && ++sdVisited < 6000) {
+    const char *n = de->d_name;
+    if (n[0] == '.') continue;
+    size_t l = strlen(n);
+    if (len + 1 + l + 1 > 160) continue;
+    rel[len] = '/'; memcpy(rel + len + 1, n, l + 1);
+    char child[300]; full_path(child, sizeof child, rel);
+    struct stat sb;
+    if (!stat(child, &sb)) {
+      if (S_ISDIR(sb.st_mode)) {
+        bool skip = false;
+        for (int i = 0; !depth && SKIP[i]; i++) if (!strcasecmp(n, SKIP[i])) skip = true;
+        if (!skip && depth < 5) sd_walk(rel, len + 1 + l, depth + 1);
+      } else if (S_ISREG(sb.st_mode) && is_save_name(n)) sd_consider(rel, false, sb.st_size);
+    }
+    rel[len] = 0;
+  }
+  closedir(d);
+}
+
+static int newest_first(const void *a, const void *b) {
+  int64_t x = ((const LLSaveFile *)a)->mtime, y = ((const LLSaveFile *)b)->mtime;
+  return x < y ? 1 : x > y ? -1 : 0;
+}
+
+int ll_sd_scan(void) {
+  sdN = sdVisited = 0;
+  char full[300];
+  full_path(full, sizeof full, LL_BACKUP_DIR);
+  DIR *d = opendir(full);
+  if (d) {
+    struct dirent *de;
+    while ((de = readdir(d)) && sdN < LL_SD_MAX) {
+      if (de->d_name[0] == '.' || !is_save_name(de->d_name)) continue;
+      char rel[200], child[300];
+      snprintf(rel, sizeof rel, "%s/%.150s", LL_BACKUP_DIR, de->d_name);
+      full_path(child, sizeof child, rel);
+      struct stat sb;
+      if (!stat(child, &sb) && S_ISREG(sb.st_mode)) sd_consider(rel, true, sb.st_size);
+    }
+    closedir(d);
+  }
+  char rel[200] = "";
+  sd_walk(rel, 0, 0);
+  qsort(sdList, sdN, sizeof *sdList, newest_first);
+  return sdN;
+}
+
+static const LLSaveFile *sd_find(const char *rel) {
+  for (int pass = 0; pass < 2; pass++) {
+    for (int i = 0; i < sdN; i++) if (!strcmp(sdList[i].path, rel)) return &sdList[i];
+    if (!pass) ll_sd_scan();
+  }
+  return NULL;
+}
+
+// The first 256 KB of a listed save (the rest of a padded file is never part of the save).
+static bool sd_read(const LLSaveFile *e, uint8_t *d) {
+  char full[300]; size_t n;
+  full_path(full, sizeof full, e->path);
+  FILE *f = fopen(full, "rb");
+  if (!f) return false;
+  n = fread(d, 1, LL_SAVE_SIZE, f);
+  fclose(f);
+  return n == LL_SAVE_SIZE;
+}
+
+bool ll_restore_from_sd(int index, char *why, size_t cap) {
+  if (index < 0 || index >= sdN) { say(why, cap, "That save isn't on the list any more."); return false; }
+  const LLSaveFile *e = &sdList[index];
+  if (!sd_read(e, filebuf)) { say(why, cap, "%s couldn't be read from the SD card.", base_name(e->path)); return false; }
+  char town[40], res[100], from[120];
+  ll_describe(filebuf, town, sizeof town, res, sizeof res);
+  snprintf(from, sizeof from, "%s", e->backup ? "a backup on the SD card" : base_name(e->path));
+  int code = stage(filebuf, LL_SAVE_SIZE, ll_crc32(filebuf, LL_SAVE_SIZE), town, res, 0, "", from, why, cap);
+  return code == 0;
+}
+
+// ---- a game's save file on the SD card ----------------------------------------------------------------------------
+// From Leaflet: replace the save file of a DS game played through TWiLight Menu++ or a forwarder.
+static int stage_sdfile(const uint8_t *body, size_t n, uint32_t crc, const char *rel, const char *town, const char *residents, uint32_t job, const char *peer, char *why, size_t cap) {
+  if (!free_for_job()) { say(why, cap, "Leaflet Link is busy. Finish on the 3DS first."); return 409; }
+  if (n != LL_SAVE_SIZE) { say(why, cap, "The save must be exactly 256 KB (got %u bytes).", (unsigned)n); return 400; }
+  if (ll_crc32(body, n) != crc) { say(why, cap, "The save was damaged on its way over Wi-Fi (its CRC didn't match). Nothing was written; send it again."); return 400; }
+  if (ll_check_save(body, why, cap)) return 422;
+  const LLSaveFile *e = sd_find(rel);
+  if (!e) { say(why, cap, "That save file isn't on the 3DS's SD card any more."); return 404; }
+  if (e->backup) { say(why, cap, "Leaflet Link's own backups are kept as they are. Choose a game's save file instead."); return 409; }
+  if (e->region != ll_save_region(body)) { say(why, cap, "That save file is from the %s version of the game, and this town is from the %s one. They can't read each other's saves.", e->region == 0x8A ? "USA" : "European", e->region == 0x8A ? "European" : "USA"); return 409; }
+  memcpy(incoming, body, n);
+  new_job(LL_JOB_SDFILE, job, peer);
+  snprintf(st.target, sizeof st.target, "%s", e->path);
+  snprintf(st.town, sizeof st.town, "%s", town[0] ? town : "your town");
+  snprintf(st.residents, sizeof st.residents, "%s", residents);
+  set_state(LL_CONFIRM, "Save to the SD card?", "Leaflet on %s wants to save %s to %s on the SD card. Press A to save it, or B to cancel.", peer, st.town, base_name(e->path));
+  return 0;
+}
+
+static void step_sd_backup(void) {
+  char full[300];
+  full_path(full, sizeof full, st.target);
+  if (!sdOld) sdOld = malloc(LL_FILE_MAX);
+  if (!sdOld || !read_file(full, sdOld, LL_FILE_MAX, &sdOldLen) || sdOldLen < LL_SAVE_SIZE) { set_state(LL_FAILED, "Nothing was changed", "%s couldn't be read any more. Nothing was written.", base_name(st.target)); return; }
+  int was = ll_save_region(sdOld);
+  if (was && was != ll_save_region(incoming)) { set_state(LL_FAILED, "Nothing was changed", "That save file now holds a save from the other region's version of the game. Nothing was written."); return; }
+  char stem[160], name[200];
+  snprintf(stem, sizeof stem, "%s", base_name(st.target));
+  char *dot = strrchr(stem, '.'); if (dot && dot > stem) *dot = 0;
+  snprintf(name, sizeof name, "%s before Leaflet", stem);
+  if (!keep_backup(name, sdOld, sdOldLen)) { set_state(LL_FAILED, "Nothing was changed", "The copy of the old save couldn't be written to the SD card (is it full or locked?). Nothing was written."); return; }
+  memcpy(original, sdOld, LL_SAVE_SIZE);
+  st.changed = memcmp(original, incoming, LL_SAVE_SIZE) ? 1 : 0;
+  if (!st.changed) { set_state(LL_DONE, "Already up to date", "%s already holds exactly this save. Nothing needed writing.", base_name(st.target)); return; }
+  set_state(LL_WRITING, "Saving to the SD card", "Writing %s. Keep the 3DS on.", base_name(st.target));
+}
+
+// The new file is written beside the old one and checked, then swapped in and checked again. If the swap goes wrong,
+// the old save goes back from the copy just made.
+static void step_sd_write(void) {
+  char full[300], tmp[330];
+  full_path(full, sizeof full, st.target);
+  snprintf(tmp, sizeof tmp, "%s.leaflet-new", full);
+  memcpy(sdOld, incoming, LL_SAVE_SIZE);   // the rest of a padded file stays as it was
+  if (!write_checked(tmp, sdOld, sdOldLen)) { remove(tmp); set_state(LL_FAILED, "Nothing was changed", "The new save couldn't be written to the SD card (is it full or locked?). %s is exactly as it was.", base_name(st.target)); return; }
+  set_state(LL_VERIFYING, "Checking", "Swapping in the new save and reading it back.");
+  remove(full);
+  bool ok = rename(tmp, full) == 0 && file_is(full, sdOld, sdOldLen);
+  if (ok) { st.written = 1; set_state(LL_DONE, "Saved!", "%s is in %s on the SD card, read back and checked byte for byte. The previous save is at %s.", st.town, base_name(st.target), st.backup); return; }
+  // Put the old file back.
+  memcpy(sdOld, original, LL_SAVE_SIZE);
+  remove(tmp);
+  st.restored = write_checked(full, sdOld, sdOldLen);
+  if (st.restored) set_state(LL_FAILED, "Your save is safe", "The new save didn't check out after it was swapped in, so the old one is back in %s and checked. Nothing changed.", base_name(st.target));
+  else set_state(LL_FAILED, "Couldn't restore", "The new save didn't check out, and the old one couldn't be put back either. A copy of the old save is at %s; copy it over %s.", st.backup, st.target);
+}
+
 static void list_differences(const uint8_t *target) {
   todoN = todoAt = 0;
   for (int p = 0; p < LL_PAGES; p++) if (memcmp(scratch + p * LL_PAGE, target + p * LL_PAGE, LL_PAGE)) todo[todoN++] = (uint16_t)p;
@@ -267,7 +660,7 @@ static void fail(const char *fmt, ...) {
   char why[240];
   va_list ap; va_start(ap, fmt); vsnprintf(why, sizeof why, fmt, ap); va_end(ap);
   if (restoring) {
-    set_state(LL_FAILED, "Couldn't restore", "%s Putting the original back failed too: %s Your game card may not load. The save that was on it is on the SD card at %s; open it in Leaflet and send it again.", reason, why, st.backup);
+    set_state(LL_FAILED, "Couldn't restore", "%s Putting the original back failed too: %s Your game card may not load. The save that was on it is on the SD card at %s: put it back with Y (Saves on the SD card), or open it in Leaflet and send it again.", reason, why, st.backup);
     return;
   }
   if (st.state == LL_WRITING || st.state == LL_VERIFYING) {
@@ -296,14 +689,14 @@ static void step_backup(void) {
   // A blank or damaged save on the cartridge is still kept on the SD card; replacing it is what the person asked for.
   int was = ll_save_region(original), now = ll_save_region(incoming);
   if (was && was != now) { fail("This game card has a %s save, but the one from Leaflet is from %s. The two versions of the game can't read each other's saves.", was == 0x8A ? "USA" : "European", now == 0x8A ? "the USA" : "Europe"); return; }
-  char stamp[40], name[96];
-  plat_stamp(stamp, sizeof stamp);
-  snprintf(name, sizeof name, "%s %s before Leaflet.sav", stamp, card.code);
-  if (!plat_save_backup(name, original, LL_SAVE_SIZE, st.backup, sizeof st.backup)) { fail("The copy of your game card's save couldn't be written to the SD card (is it full or locked?)."); return; }
   memcpy(scratch, original, LL_SAVE_SIZE);
   list_differences(incoming);
   st.changed = todoN; st.written = 0; restoring = checking = false; verifyPasses = 0;
   if (!todoN) { set_state(LL_DONE, "Already up to date", "The game card already has exactly this save. Nothing needed writing."); return; }
+  // Only kept when something will be written (an identical save leaves nothing to undo).
+  char name[40];
+  snprintf(name, sizeof name, "%s before %s", card.code, st.source[0] ? "restoring" : "Leaflet");
+  if (!keep_backup(name, original, LL_SAVE_SIZE)) { fail("The copy of your game card's save couldn't be written to the SD card (is it full or locked?)."); return; }
   set_state(LL_WRITING, "Saving to the game card", "Writing %d of %d pages that changed. Keep the 3DS on and the game card in.", todoN, LL_PAGES);
 }
 
@@ -347,11 +740,12 @@ void ll_tick(void) {
   refresh_card(false);
   switch (st.state) {
     case LL_CONFIRM:
-      if (plat_ms() - st.since > 120000) set_state(LL_IDLE, "Ready", "The save from Leaflet wasn't confirmed within two minutes, so it was set aside. Nothing was written.");
-      else if (!card.present) set_state(LL_IDLE, "Ready", "The game card was taken out, so the save from Leaflet was set aside. Nothing was written.");
+      if (plat_ms() - st.since > 120000) set_state(LL_IDLE, "Ready", "The save wasn't confirmed within two minutes, so it was set aside. Nothing was written.");
+      else if (!card.present && st.kind == LL_JOB_CARD) set_state(LL_IDLE, "Ready", "The game card was taken out, so the save was set aside. Nothing was written.");
       break;
-    case LL_BACKUP: step_backup(); break;
-    case LL_WRITING: step_write(); break;
+    case LL_BACKUP: if (st.kind == LL_JOB_BACKUP) step_card_backup(); else if (st.kind == LL_JOB_SDFILE) step_sd_backup(); else step_backup(); break;
+    case LL_WRITING: if (st.kind == LL_JOB_SDFILE) step_sd_write(); else step_write(); break;
+    case LL_CHECKING: step_health(); break;
     case LL_VERIFYING: step_verify(); break;
     case LL_RESTORING: if (checking) step_verify(); else step_write(); break;
     case LL_UPDATING: step_update(); break;
@@ -362,8 +756,11 @@ void ll_tick(void) {
 void ll_answer(bool yes) {
   if (st.state == LL_CONFIRM) {
     if (yes && st.update) set_state(LL_UPDATING, "Updating", "Installing Leaflet Link %s.", st.version);
+    else if (yes && st.kind == LL_JOB_SDFILE) set_state(LL_BACKUP, "Keeping a copy", "Keeping a copy of the old save file on the SD card.");
     else if (yes) set_state(LL_BACKUP, "Keeping a copy", "Reading what's on the game card now and keeping a copy on the SD card.");
     else set_state(LL_IDLE, "Cancelled", "You cancelled on the 3DS. Nothing was written.");
+  } else if (st.state == LL_CHECKING && !yes) {
+    set_state(LL_IDLE, "Ready", "Check stopped. Nothing was changed.");
   } else if (st.state == LL_DONE || st.state == LL_FAILED) {
     set_state(LL_IDLE, "Ready", "Waiting for Leaflet.");
   }
@@ -421,7 +818,8 @@ static void respond_error(int code, const char *why) {
   char e[400], j[460]; json_str(e, sizeof e, why); snprintf(j, sizeof j, "{\"error\":%s}", e); respond_json(code, j);
 }
 
-static const char *STATE_NAMES[] = { "idle", "confirm", "backup", "writing", "verifying", "restoring", "done", "failed", "updating" };
+static const char *STATE_NAMES[] = { "idle", "confirm", "backup", "writing", "verifying", "restoring", "done", "failed", "updating", "checking" };
+static const char *JOB_NAMES[] = { "card", "update", "sdfile", "backup", "health" };
 
 static void send_info(void) {
   char why[160] = "", t[64], c[16], w[200], j[1400];
@@ -431,7 +829,7 @@ static void send_info(void) {
   char pw[120] = ""; bool power = plat_power_ok(pw, sizeof pw); char pj[160]; json_str(pj, sizeof pj, pw);
   char clk[32]; plat_clock(clk, sizeof clk);
   snprintf(j, sizeof j,
-    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\","
+    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\"],"
     "\"card\":{\"present\":%s,\"ds\":%s,\"title\":%s,\"code\":%s,\"ready\":%s,\"writable\":%s,\"chipId\":\"%02X%02X%02X\",\"size\":%u,\"why\":%s},"
     "\"power\":{\"ok\":%s,\"why\":%s}}",
     LL_VERSION, LL_PROTOCOL, STATE_NAMES[st.state], clk, card.present ? "true" : "false", card.ds ? "true" : "false", t, c,
@@ -441,17 +839,57 @@ static void send_info(void) {
 }
 
 static void send_status(void) {
-  char t[80], m[1000], b[200], tw[60], v[40], j[1600];
+  char t[80], m[1000], b[480], tw[60], v[40], src[200], tg[340], hj[640] = "null", j[3000];
   json_str(v, sizeof v, st.update ? st.version : "");
   json_str(t, sizeof t, st.title); json_str(m, sizeof m, st.message); json_str(b, sizeof b, st.backup); json_str(tw, sizeof tw, st.town);
-  snprintf(j, sizeof j, "{\"state\":\"%s\",\"job\":%u,\"progress\":%.3f,\"title\":%s,\"message\":%s,\"town\":%s,\"backup\":%s,\"changed\":%d,\"written\":%d,\"restored\":%s,\"update\":%s,\"version\":%s}",
-    STATE_NAMES[st.state], (unsigned)st.job, st.progress, t, m, tw, b, st.changed, st.written, st.restored ? "true" : "false", st.update ? "true" : "false", v);
+  json_str(src, sizeof src, st.source); json_str(tg, sizeof tg, st.target);
+  if (st.kind == LL_JOB_HEALTH) {
+    char cw[340]; json_str(cw, sizeof cw, health.checkWhy);
+    snprintf(hj, sizeof hj, "{\"passes\":%d,\"of\":%d,\"unstable\":%d,\"flips\":%d,\"firstBad\":%u,\"idStable\":%s,\"check\":%d,\"checkWhy\":%s,\"blank\":%s,\"ms\":%u}",
+      health.passes, HEALTH_PASSES, health.unstable, health.flips, (unsigned)health.firstBad, health.idStable ? "true" : "false", health.check, cw, health.blank ? "true" : "false", (unsigned)health.ms);
+  }
+  snprintf(j, sizeof j, "{\"state\":\"%s\",\"kind\":\"%s\",\"job\":%u,\"progress\":%.3f,\"title\":%s,\"message\":%s,\"town\":%s,\"backup\":%s,\"changed\":%d,\"written\":%d,\"restored\":%s,\"update\":%s,\"version\":%s,\"source\":%s,\"target\":%s,\"caution\":%s,\"health\":%s}",
+    STATE_NAMES[st.state], JOB_NAMES[st.kind], (unsigned)st.job, st.progress, t, m, tw, b, st.changed, st.written, st.restored ? "true" : "false", st.update ? "true" : "false", v, src, tg, st.caution ? "true" : "false", hj);
   respond_json(200, j);
+}
+
+// Wall-clock seconds as "2026-10-28 14:03:22".
+static void wall_text(int64_t t, char *out, size_t cap) {
+  if (!t) { snprintf(out, cap, "%s", ""); return; }
+  time_t tt = (time_t)t; struct tm tm;
+  gmtime_r(&tt, &tm);
+  strftime(out, cap, "%Y-%m-%d %H:%M:%S", &tm);
+}
+
+static void send_sd_list(void) {
+  if (!free_for_job()) { respond_error(409, "Leaflet Link is busy. Try again when the 3DS says it's done."); return; }
+  ll_sd_scan();
+  static char j[LL_SD_MAX * 700 + 64];
+  size_t k = (size_t)snprintf(j, sizeof j, "{\"saves\":[");
+  for (int i = 0; i < sdN; i++) {
+    const LLSaveFile *e = &sdList[i];
+    char p[340], tw[100], r[220], when[32];
+    json_str(p, sizeof p, e->path); json_str(tw, sizeof tw, e->town); json_str(r, sizeof r, e->residents); wall_text(e->mtime, when, sizeof when);
+    k += (size_t)snprintf(j + k, sizeof j - k, "%s{\"path\":%s,\"town\":%s,\"residents\":%s,\"size\":%u,\"saved\":\"%s\",\"region\":\"%s\",\"ok\":%s,\"kind\":\"%s\"}",
+      i ? "," : "", p, tw, r, (unsigned)e->size, when, e->region == 0x8A ? "USA" : "Europe", e->ok ? "true" : "false", e->backup ? "backup" : "game");
+    if (k >= sizeof j) { respond_error(500, "Too many saves to list."); return; }
+  }
+  snprintf(j + k, sizeof j - k, "]}");
+  respond_json(200, j);
+}
+
+static void send_sd_file(const char *rel) {
+  const LLSaveFile *e = sd_find(rel);
+  if (!e) { respond_error(404, "That save isn't on the 3DS's SD card any more."); return; }
+  if (!sd_read(e, filebuf)) { respond_error(500, "The save couldn't be read from the SD card."); return; }
+  char extra[120];
+  snprintf(extra, sizeof extra, "X-Leaflet-CRC32: %08x\r\n", (unsigned)ll_crc32(filebuf, LL_SAVE_SIZE));
+  respond(200, "application/octet-stream", filebuf, LL_SAVE_SIZE, extra);
 }
 
 static void send_save(void) {
   char why[160];
-  if (st.state != LL_IDLE && st.state != LL_DONE && st.state != LL_FAILED) { respond_error(409, "Leaflet Link is busy saving. Try again when the 3DS says it's done."); return; }
+  if (!free_for_job()) { respond_error(409, "Leaflet Link is busy. Try again when the 3DS says it's done."); return; }
   refresh_card(true);
   if (!ll_card_ready(why, sizeof why)) { respond_error(409, why); return; }
   if (!read_stable(scratch)) { respond_error(500, "The game card couldn't be read reliably (two reads never agreed). Clean the game card's contacts and try again."); return; }
@@ -481,12 +919,12 @@ static bool query(const char *q, const char *key, char *out, size_t cap) {
 }
 
 static void handle(void) {
-  char line[600];
+  char line[1600];
   size_t i = 0;
   while (i < conn.hdrEnd && i + 1 < sizeof line && conn.in[i] != '\r') { line[i] = (char)conn.in[i]; i++; }
   line[i] = 0;
-  char method[8] = "", target[560] = "";
-  sscanf(line, "%7s %559s", method, target);
+  char method[8] = "", target[1560] = "";
+  sscanf(line, "%7s %1559s", method, target);
   char *q = strchr(target, '?');
   if (q) *q++ = 0;
   const uint8_t *body = conn.in + conn.hdrEnd;
@@ -500,7 +938,7 @@ static void handle(void) {
     char crc[16], town[sizeof st.town], res[sizeof st.residents], job[16], why[240];
     query(q, "crc", crc, sizeof crc); query(q, "town", town, sizeof town); query(q, "residents", res, sizeof res); query(q, "job", job, sizeof job);
     if (strlen(crc) != 8) { respond_error(400, "Missing CRC."); return; }
-    int code = stage(body, blen, (uint32_t)strtoul(crc, NULL, 16), town, res, (uint32_t)strtoul(job, NULL, 10), conn.ip, why, sizeof why);
+    int code = stage(body, blen, (uint32_t)strtoul(crc, NULL, 16), town, res, (uint32_t)strtoul(job, NULL, 10), conn.ip, NULL, why, sizeof why);
     if (code) respond_error(code, why); else send_status();
     return;
   }
@@ -513,9 +951,29 @@ static void handle(void) {
     return;
   }
   if (!strcmp(method, "POST") && !strcmp(target, "/cancel")) {
-    if (st.state == LL_CONFIRM) ll_answer(false);
+    if (st.state == LL_CONFIRM || st.state == LL_CHECKING) ll_answer(false);
     send_status();
     return;
+  }
+  if (!strcmp(method, "POST") && !strcmp(target, "/health")) {
+    char why[200];
+    if (!ll_start_health(why, sizeof why)) { respond_error(409, why); return; }
+    send_status();
+    return;
+  }
+  if (!strcmp(method, "GET") && !strcmp(target, "/sd")) { send_sd_list(); return; }
+  if (!strcmp(target, "/sd/file")) {
+    char path[200];
+    if (!query(q, "path", path, sizeof path) || path[0] != '/') { respond_error(400, "Missing path."); return; }
+    if (!strcmp(method, "GET")) { send_sd_file(path); return; }
+    if (!strcmp(method, "POST")) {
+      char crc[16], town[sizeof st.town], res[sizeof st.residents], job[16], why[240];
+      query(q, "crc", crc, sizeof crc); query(q, "town", town, sizeof town); query(q, "residents", res, sizeof res); query(q, "job", job, sizeof job);
+      if (strlen(crc) != 8) { respond_error(400, "Missing CRC."); return; }
+      int code = stage_sdfile(body, blen, (uint32_t)strtoul(crc, NULL, 16), path, town, res, (uint32_t)strtoul(job, NULL, 10), conn.ip, why, sizeof why);
+      if (code) respond_error(code, why); else send_status();
+      return;
+    }
   }
   respond_error(404, "Unknown request.");
 }

@@ -40,6 +40,8 @@
   }
 
   // Adds a snapshot unless the newest one for that town is identical. Returns the record or null.
+  // opt.when: when it was made (default now); opt.history: an older version arriving late (from the 3DS's SD card),
+  // so it's skipped if any version of the town is identical, not just the newest.
   async function add(bytes, kind, opt = {}) {
     if (!settings.enabled && kind !== 'manual') return null;
     const info = describe(bytes); if (!info) return null;
@@ -48,11 +50,13 @@
     if (kind === 'draft') {
       if (mine.some(r => r.kind === 'draft' && r.hash === hsh)) return null;
       await tx('readwrite', st => { mine.filter(r => r.kind === 'draft').forEach(r => st.delete(r.id)); });
+    } else if (opt.history) {
+      if (mine.some(r => r.hash === hsh)) return null;
     } else if (kind !== 'manual') {
       const last = mine.find(r => r.kind !== 'draft');
       if (last && last.hash === hsh) return null;
     }
-    const rec = { ...info, kind, when: Date.now(), hash: hsh, size: data.length, pinned: false, file: opt.file || '', bytes: data };
+    const rec = { ...info, kind, when: opt.when || Date.now(), hash: hsh, size: data.length, pinned: false, file: opt.file || '', bytes: data };
     rec.id = await tx('readwrite', st => req(st.add(rec)));
     if (kind !== 'draft') await prune(info.key);
     if (native && kind !== 'draft') native.postMessage({ cmd: 'backupFile', town: info.town, name: `${stamp(rec.when)} ${KINDS[kind][1]}.sav`, data: b64(data) });

@@ -13,11 +13,11 @@ emulator with sharper graphics and then put the town back on the card.
 
 You need a 3DS that can run homebrew. Leaflet Link only has to be installed once.
 
-- **Mac app, over Wi-Fi:** on the 3DS, open the Homebrew Launcher and press **Y**. In Leaflet, open
-  **Cartridge Sync** and click **Send to my 3DS**. Leaflet finds the 3DS, installs Leaflet Link in the SD card's
-  `3ds` folder, starts it and connects to it.
-- **Windows, over Wi-Fi:** double-click **Install Leaflet Link** in the Leaflet folder. Press **Y** in the Homebrew
-  Launcher, then Enter in the installer.
+- **Over Wi-Fi, from Leaflet** (the Mac app, or Windows when you open Leaflet with **Start Leaflet**): on the 3DS,
+  open the Homebrew Launcher and press **Y**. In Leaflet, open **Cartridge Sync** and click **Send to my 3DS**.
+  Leaflet finds the 3DS, installs Leaflet Link in the SD card's `3ds` folder, starts it and connects to it.
+- **Windows, with the installer:** double-click **Install Leaflet Link** in the Leaflet folder. Press **Y** in the
+  Homebrew Launcher, then Enter in the installer.
 - **By hand:** copy `LeafletLink.3dsx` (from Cartridge Sync or the release) into the `3ds` folder on the SD card.
 
 The wireless installs use the Homebrew Launcher's own receiver (the protocol devkitPro's `3dslink` uses). If the 3DS
@@ -38,10 +38,52 @@ From there you can:
 - **Open in Leaflet**: edit the town that's on the card.
 - **Save for an emulator**: get a `.sav` for melonDS, DeSmuME or any emulator that takes raw saves.
 - **Send to the game card**: put back the town that's open in Leaflet, or any `.sav` (an emulator's, say).
+- **Check the card**: the health check below.
 
-## Playing on melonDS (Mac app)
+## On the 3DS alone
 
-**Play on melonDS** on the Cartridge Sync page runs a whole round trip (`mac/EmulatorSession.swift`):
+Leaflet Link's own menu works without a computer, and without Wi-Fi:
+
+- **X: Back up.** Reads the game card's save (each 4 KB until two reads agree) and writes it to
+  `/3ds/LeafletLink/backups/<date> ADME backup.sav`, then reads the file back. A blank card has nothing to back up; a
+  save that fails its checksums is still kept exactly as it is, with a warning.
+- **Y: Saves.** Lists every Wild World save on the SD card, newest first: Leaflet Link's backups, and the save files of
+  TWiLight Menu++ and nds-bootstrap forwarders. Pick one and press **A** to put it on the game card. It goes through
+  every check a save from Leaflet does (CRC, both copies of the town, the letters, the chip, the battery, the region),
+  shows the town's name, and waits for **A** again. The card's current save is kept first as
+  `<date> ADME before restoring.sav`. A damaged save is listed in red and can't be chosen.
+- **R: Check.** The health check: it reads the whole save chip six times, compares every byte of every read with the
+  first, and asks the chip for its ID each time. Then it checks the town's checksums. A healthy card reads the same
+  every time; a dusty contact flips a bit now and then, which shows up as areas that changed between reads. It never
+  writes, and **B** stops it. Leaflet's **Check the card** runs the same check and shows the details.
+
+## TWiLight Menu++ and forwarder saves
+
+TWiLight Menu++ and nds-bootstrap keep a DS game's save beside it on the SD card, usually in a `saves` folder next to
+the `.nds` (`/roms/nds/saves/…sav`), sometimes in the same folder, with `.sav1` to `.sav9` for extra slots. Leaflet
+Link looks through the SD card a few folders deep for them (skipping `Nintendo 3DS`, `3ds`, `luma` and the like), and
+reads only two bytes of each `.sav` first, so other games' saves cost almost nothing. Anything that looks like a Wild
+World save is read in full and checked.
+
+From Leaflet, each one can be opened, put on the game card, or replaced with the town that's open in Leaflet. Replacing
+one is guarded like a card write: the CRC and every checksum are checked, the region must match, and the 3DS waits for
+**A**. Then the old file is copied to the backups folder (`… before Leaflet.sav`) and read back, the new save is
+written beside the old one (`.leaflet-new`) and read back, and only then is it swapped in and checked again. If the
+swap doesn't check out, the old file goes back. A file padded past 256 KB keeps its padding. Leaflet Link's own
+backups are never written over.
+
+## The Town Diary
+
+Each time Leaflet reads the game card, that version goes into Backups (an unchanged card adds nothing). On connecting,
+Leaflet also brings in the versions on the 3DS's SD card that it hasn't seen: Leaflet Link's backups and TWiLight Menu++
+saves, each with the time it was made on the 3DS (adjusted for any difference between the 3DS's clock and the
+computer's). The Town Diary compares each version with the one before, so what was played on the real console shows
+up there too.
+
+## Playing on melonDS (Mac and Windows)
+
+**Play on melonDS** on the Cartridge Sync page runs a whole round trip (`mac/EmulatorSession.swift` on a Mac,
+`windows/Leaflet Helper.ps1` on Windows):
 
 1. **Setup, once.** Choose the ROM backup you made from your own game card. If melonDS isn't installed, **Install
    melonDS** fetches the latest macOS build from melonDS's GitHub releases (`mac/MelonInstaller.swift`). The download
@@ -63,6 +105,15 @@ From there you can:
 The session is saved to disk (`session.json` and `start.sav`), so if Leaflet is closed while you play, it offers to
 send the town back the next time it opens.
 
+**On Windows**, Leaflet is a page in an Edge (or Chrome) app window, so **Start Leaflet** also starts Leaflet Helper,
+a PowerShell script beside it that does what the Mac app does natively: the play folder is
+`%LOCALAPPDATA%\Leaflet\Play` (never OneDrive), **Install melonDS** puts the latest Windows build, checked against
+GitHub's SHA-256, in `%LOCALAPPDATA%\Programs\melonDS` with no administrator needed (an update keeps
+`melonDS.toml` and `wfcsettings.bin`, which melonDS keeps next to `melonDS.exe`), and it finds saves on removable
+drives and installs Leaflet Link over Wi-Fi. It listens on `127.0.0.1` only, answers only the Leaflet window it opened
+(a random token in that window's address, its own host name, and no other website's origin), and closes itself a
+minute after the window is gone. Leaflet keeps its `file://` address, so existing backups stay where they were.
+
 Leaflet Link can't send the ROM itself. Apps started from the Homebrew Launcher can only reach a DS game card's
 save chip; reading the game takes lower-level access than a homebrew app has. Use a backup you made yourself.
 
@@ -76,7 +127,7 @@ lands in a new week or seven or more days pass (`Town_ApplyElapsedDays`), or aft
 Leaflet keeps the town's time with the save (`js/gameclock.js`):
 
 - Leaflet Link 1.2 reports the 3DS's clock in `/info`. Leaflet compares it with the computer's clock, and with
-  melonDS's own `RTC.Offset` (from `melonDS.toml`) on a Mac.
+  melonDS's own `RTC.Offset` (from `melonDS.toml`).
 - **To an emulator** (Play on melonDS, Save for an emulator), the save's offset moves by the 3DS clock minus the
   emulator's clock, so the game shows the same date and time there.
 - **Back to the game card**, it moves the other way. For a save file, the review asks where it was last played: an
@@ -88,7 +139,7 @@ Leaflet keeps the town's time with the save (`js/gameclock.js`):
 
 Flashcarts such as the R4 keep each game's save next to it on the microSD card (the same name ending in `.sav`,
 sometimes padded to 512 KB). **Look on SD cards** in the Mac app searches every inserted SD card and removable drive
-a few folders deep (`mac/SaveFinder.swift`). In a browser, choose the card's folder. Each town found can be opened,
+a few folders deep (`mac/SaveFinder.swift`; Leaflet Helper on Windows). In a browser, choose the card's folder. Each town found can be opened,
 backed up or sent to the game card. Japanese and Korean saves are listed but marked unsupported.
 
 ## Keeping your friend code
@@ -109,8 +160,9 @@ Cartridge Sync treats the save as the source of truth (`js/wfc.js`):
    every slot's checksum is valid, and that no other byte changed. A file with a damaged slot is refused, because the
    game would throw such a file away and make a new ID.
 
-On a Mac, **Give melonDS this ID** updates `~/Library/Preferences/melonDS/wfcsettings.bin` directly. The old file is
-kept next to it, and nothing is written while melonDS is open. Elsewhere, download the file or update your own.
+On a Mac, **Give melonDS this ID** updates `~/Library/Preferences/melonDS/wfcsettings.bin` directly; on Windows, the
+one next to `melonDS.exe`. The old file is kept next to it, and nothing is written while melonDS is open. Elsewhere,
+download the file or update your own.
 
 Register for Wi-Fi on the system you'll play on most; that system's ID becomes the town's. Play online on one system
 at a time.
@@ -180,8 +232,11 @@ purpose:
 | `--pull-at N` | the card taken out mid-write |
 | `--low-battery` | a battery too low to start |
 | `--answer yes/no/delay/ask` | what the person presses on the 3DS |
+| `--sd DIR` | the SD card (a folder) |
+| `--console` | the console's own menu, typed on stdin: `backup`, `health`, `scan`, `restore N`, `stop` |
 
-To build the simulator and run the end-to-end tests (34 checks, including updates), use:
+To build the simulator and run the end-to-end tests (60 checks, including updates, the console's menu, SD card saves
+and the health check), use:
 
 ```bash
 make -C link sim && python3 link/tests/test_link.py link/host/leaflet-link-sim
@@ -197,11 +252,15 @@ This is plain HTTP on port 8226, with CORS open so Leaflet can call it from a pa
 
 | Request | Answer |
 |---|---|
-| `GET /info` | app version, protocol, card (`present`, `code`, `ready`, `writable`, `why`), battery |
+| `GET /info` | app version, protocol, `features` (1.3: `sd`, `health`), the 3DS's clock, card (`present`, `code`, `ready`, `writable`, `why`), battery |
 | `GET /save` | the card's 256 KB save, with its CRC-32 in `X-Leaflet-CRC32` |
 | `POST /save?crc=&town=&residents=&job=` | a 256 KB save to write; checked, then waits for A on the 3DS |
-| `GET /status` | `state` (idle, confirm, backup, writing, verifying, restoring, done, failed), progress, message, backup path |
-| `POST /cancel` | sets aside a save that hasn't been confirmed |
+| `GET /status` | `state` (idle, confirm, backup, writing, verifying, restoring, done, failed, updating, checking), `kind` (card, update, sdfile, backup, health), progress, message, backup path, and for a health check `health` (passes, unstable areas, flipped bits, checksums) |
+| `POST /cancel` | sets aside a save that hasn't been confirmed, or stops a health check |
+| `POST /health` | starts the health check (1.3) |
+| `GET /sd` | Wild World saves on the SD card: path, town, residents, size, when it was saved (3DS clock), region, `ok`, `kind` (backup or game) (1.3) |
+| `GET /sd/file?path=` | the first 256 KB of a listed save, with its CRC-32 (1.3) |
+| `POST /sd/file?path=&crc=&town=&residents=&job=` | a 256 KB save for a listed game save file; checked, then waits for A on the 3DS (1.3) |
 | `POST /update?crc=&version=&job=` | a new `LeafletLink.3dsx`; checked (CRC, 3DSX header), then waits for A on the 3DS |
 
 `link/tests/mock_hbl.py` stands in for the Homebrew Launcher's receiver, to test the wireless installers. It was

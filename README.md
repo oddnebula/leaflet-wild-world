@@ -24,8 +24,10 @@ No other Wild World editor we know of has these:
 - 🩺 **Save Doctor**, which finds and fixes the broken states old editors and cheat codes leave behind.
 - 🪪 **A shareable town card**: one image with your map, fruit, tune, flag, residents and neighbors.
 - 🎮 **Cartridge Sync** with your real game card over Wi-Fi, through Leaflet Link on a 3DS that runs homebrew. Edit
-  your real town, or play it on an emulator with sharper graphics and send it back, **keeping your friend code**. Every write is checked byte for
-  byte, and the old save is kept first. *New: try it with a backed-up save first.*
+  your real town, or play it on melonDS (Mac or Windows) with sharper graphics and send it back, **keeping your friend
+  code and your turnips**. Every write is checked byte for byte, and the old save is kept first. Leaflet Link also
+  **backs up and restores the game card on the 3DS alone**, gives the card a **health check**, and finds
+  **TWiLight Menu++** saves on the 3DS's SD card. What you play on the real console joins the Town Diary.
 - ✨ **Editors for things nobody else touches**: Celeste's constellations, the bulletin board, the post office,
   furniture switches and gyroid beats, Mom's letters, villager hobbies, and every one of the game's event flags.
 
@@ -99,13 +101,14 @@ done.
 | | |
 |---|---|
 | ![Cartridge Sync connected to a game card](docs/screenshots/sync.png) **Connected:** the town on your game card, ready to open, play on melonDS or send back | ![Reviewing a send](docs/screenshots/sync-review.png) **Before sending:** what changes, and the town's clock kept in step |
+| ![Saves on the 3DS's SD card](docs/screenshots/sync-3ds.png) **On the 3DS's SD card:** Leaflet Link's backups and TWiLight Menu++ saves | ![Game card health check](docs/screenshots/sync-health.png) **Health check:** the save chip read six times, every byte compared |
 
 <sub>Shown connected to the Leaflet Link simulator (`link/host`) with the demo town; the friend codes are made up.</sub>
 
 1. **Install Leaflet Link over Wi-Fi.** You need a 3DS that can run homebrew. Open the Homebrew Launcher and press
-   **Y**, then click **Send to my 3DS** in Leaflet's **Cartridge Sync** page (Mac), or double-click
-   **Install Leaflet Link** in the Leaflet folder (Windows). You can also copy `LeafletLink.3dsx` to the SD card's
-   `3ds` folder yourself. Later updates go over Wi-Fi too.
+   **Y**, then click **Send to my 3DS** in Leaflet's **Cartridge Sync** page (Mac app, or Windows when you open
+   Leaflet with **Start Leaflet**). You can also copy `LeafletLink.3dsx` to the SD card's `3ds` folder yourself.
+   Later updates go over Wi-Fi too.
 2. Put the game card in and open Leaflet Link. Leaflet connects to it.
 3. Choose **Open in Leaflet**, **Save for an emulator** or **Send to the game card**.
 
@@ -117,10 +120,12 @@ Sending is guarded at every step:
   puts the original back.
 - **Afterwards:** Leaflet reads the card again over Wi-Fi to confirm.
 
-**Play on melonDS with one click (Mac app).** No melonDS yet? **Install melonDS** downloads the latest release from
-melonDS's official GitHub page, checks it against the SHA-256 GitHub publishes and checks its code signature, then
-puts it in your Applications folder. melonDS isn't notarized by Apple, so the first time it opens macOS asks you to
-allow it (Privacy & Security › Open Anyway), and Leaflet shows you where. Leaflet reads the town from your game card and starts melonDS with it,
+**Play on melonDS with one click (Mac and Windows).** No melonDS yet? **Install melonDS** downloads the latest
+release from melonDS's official GitHub page and checks it against the SHA-256 GitHub publishes. On a Mac it also
+checks the app's code signature and puts it in your Applications folder; melonDS isn't notarized by Apple, so the
+first time it opens macOS asks you to allow it (Privacy & Security › Open Anyway), and Leaflet shows you where. On
+Windows it goes in your user's Programs folder, with no administrator needed, and updating it keeps its settings.
+Leaflet reads the town from your game card and starts melonDS with it,
 using a ROM backup you made from that same card. It keeps every save melonDS writes in Backups. When you quit
 melonDS, it shows what changed and offers to send the town back, through the same checks as any other send. If the
 game card was played on the 3DS in the meantime, Leaflet warns you before anything is replaced.
@@ -133,9 +138,27 @@ offset by the difference. The game's date and time carry on exactly, and turnips
 **Saves on SD cards.** Put your R4 (or other flashcart) microSD card in your computer and Cartridge Sync finds every
 Wild World save on it, so you can open it, back it up or put it on your game card.
 
+**Leaflet Link on its own.** No computer needed for these, right on the 3DS:
+- **X: Back up** copies the game card's save to the SD card, read until two reads agree and checked byte for byte.
+- **Y: Saves** lists every Wild World save on the 3DS's SD card (its backups, and TWiLight Menu++ saves) and puts the
+  one you pick back on the game card, through the same checks as a save from Leaflet, after keeping the card's
+  current save.
+- **R: Check** is a health check for the game card: it reads the save chip six times and compares every byte, so dust
+  on the contacts shows up before it can spoil a write. It also checks the town's own checksums. It never writes.
+  Leaflet has the same check as **Check the card**.
+
+**TWiLight Menu++ and forwarders.** If you also play Wild World from the 3DS's SD card (TWiLight Menu++, or an
+nds-bootstrap forwarder), Cartridge Sync lists those saves next to Leaflet Link's backups. Open one, put it on the
+game card, or save the town that's open in Leaflet into it. The 3DS keeps a copy of the old file and asks for **A**
+first, writes the new file beside the old one, reads it back, and only then swaps it in.
+
+**The Town Diary, from real play.** Each time you connect, the game card's town is kept in Backups, and so are the
+versions on the 3DS's SD card, with the time they were made. So the Town Diary tells what happened on the real console
+too: "Juniper caught a Rainbow Trout for the first time."
+
 **Your friend code comes along.** Wild World keeps a friend code only on a system whose Nintendo WFC ID matches the
-one in the save. So Leaflet reads the ID from the save itself and gives it to melonDS: one click on a Mac, or a
-ready-made `wfcsettings.bin` (or your own firmware dump, updated). The same friend code and friends then work on the
+one in the save. So Leaflet reads the ID from the save itself and gives it to melonDS: one click in the Mac app or
+on Windows, or a ready-made `wfcsettings.bin` (or your own firmware dump, updated). The same friend code and friends then work on the
 emulator and on your DS. Each resident's friend code, and their friends', also show on their page.
 
 How it works, how to build it, and its fault tests are in [link/README.md](link/README.md). Leaflet Link is new:
@@ -166,7 +189,7 @@ Still, back up your save before playing an edited file.
 | Catalog and encyclopedia | Fill or clear the catalog, every bug and fish individually, and raw catalog bits |
 | Catalog browser | Every item the catalog can hold (furniture, clothing, accessories, umbrellas, wallpaper, carpets, songs, stationery, gyroids, fossils, art, pics) with each resident's catalog ticks, search, “not in my catalog” and “in the house now” filters, and add-all. With a ROM: the game's price, series, theme or set, two colors and Happy Room Academy points for each item, sortable. A **set tracker** shows every series, theme and set with what's registered, what's in the house and the HRA bonus a full set is worth |
 | Today in town | Your town's **hourly music** from the ROM (following the game clock and changing on the hour, or any hour you pick, looping). The game's own date and time (your clock plus the save's offset), what's happening today, the hour-by-hour weather if the day has been rolled, today's turnip price (or Joan's), what the museum still needs that's out right now, Crazy Redd's day, the Roost, a sick neighbor, birthdays, and the next two weeks |
-| Town diary | Your town's story, told by comparing each kept backup with the one before: residents and neighbors moving in and out, hobbies, first catches, catalog additions, museum donations (and who made them), bells earned and spent, Nook Points, loan payments, house upgrades, K.K. songs learned, town hall donations, a new town tune or flag, and the perfect-town streak |
+| Town diary | Your town's story, told by comparing each kept backup with the one before (including what you played on your real game card, read through Cartridge Sync): residents and neighbors moving in and out, hobbies, first catches, catalog additions, museum donations (and who made them), bells earned and spent, Nook Points, loan payments, house upgrades, K.K. songs learned, town hall donations, a new town tune or flag, and the perfect-town streak |
 | Town card | One shareable picture of your town, drawn entirely by Leaflet (no game art): the map from above, native fruit, town tune, flag, residents, neighbors and milestones. Wide (1200×675) or square (1080×1080), four color themes, any section can be turned off. Download as PNG or copy to the clipboard |
 | Calendar | A month grid of every festival (Fishing Tourney, Bug-Off, Flower Fest, Fireworks, Acorn Festival, Bright Nights, flea markets, La-Di-Day and Yay Day, New Year), every resident's and neighbor's birthday, this week's visitors, Joan and K.K., resolved for any year from the game's own event schedule. **Export to .ics** for Apple Calendar, Google Calendar or Outlook |
 | Hidden flags | Mr. Resetti pending flag (and clearing it for everyone); **today's chats** (Celeste, Gracie, Wendell, Saharah, Mabel, Pascal, Lyle, Tortimer's events, Gulliver) with a “fresh day” reset; **errands** (both favors with their villagers, the Roost part-time job and its customers, the parcel to deliver, house-visit invitations, “call off”); **Wi-Fi friends** (names and towns, clear the roster, checksum kept valid); bit-level editors for every resident block |

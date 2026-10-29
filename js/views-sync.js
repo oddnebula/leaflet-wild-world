@@ -83,7 +83,7 @@
       S.info = j; noteClock(j); S.phase = 'ready'; S.note = ''; store.set(S.addr.trim()); markInstalled();
       sfx.bell(); paint();
       watchInfo();
-      if (j.card.ready) readCart();
+      if (j.card.ready) readCart().then(diaryFromSD); else diaryFromSD();
       return true;
     } catch (e) { if (!quiet) fail(e, 'off'); return false; }
   }
@@ -101,8 +101,11 @@
   // js/linkapp.js carries the Leaflet Link this Leaflet was built with (tools/build_link_js.py).
   const APPB = window.LEAFLET_LINK_APP || null;
   const appBytes = () => Uint8Array.from(atob(APPB.data), c => c.charCodeAt(0));
-  const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.leaflet;
+  // The Mac app's bridge, or on Windows Leaflet Helper (js/winhelper.js), which takes the same commands.
+  const mac = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.leaflet;
+  const native = mac || window.LeafletHelper || null;
   const onWindows = /Windows/.test(navigator.userAgent);
+  const HERE = mac ? 'this Mac' : 'this PC';
   const INSTALLED_KEY = 'leaflet-link-installed';
   const installedBefore = () => { try { return !!localStorage.getItem(INSTALLED_KEY); } catch (e) { return false; } };
   function markInstalled() { try { localStorage.setItem(INSTALLED_KEY, '1'); } catch (e) { /* private mode */ } }
@@ -168,7 +171,7 @@
     if (APP.save) return { s: APP.save, where: 'the town open in Leaflet' };
     return null;
   }
-  // melonDS on this Mac: 'none' (no settings yet), 'match', 'other', or 'damaged'.
+  // melonDS on this computer: 'none' (no settings yet), 'match', 'other', or 'damaged'.
   function melonState(id) {
     if (!W.melon) return '';
     if (!W.melon.exists) return 'none';
@@ -211,7 +214,7 @@
       if (t.mixed) parts.push(h('div', { class: 'sync-msg bad' }, '⚠️ These residents registered on different systems. melonDS can only match one, so it gets the first resident’s ID; the others get new friend codes there.'));
       if (native) {
         const st = melonState(t.userId);
-        const line = { none: 'melonDS on this Mac isn’t set up for Wi-Fi yet.', match: '✅ melonDS on this Mac already has this town’s ID.', other: 'melonDS on this Mac has a different Wi-Fi ID, so this town would get a new friend code there.', damaged: 'melonDS’s Wi-Fi settings on this Mac are damaged; Leaflet can replace them with fresh ones.' }[st] || 'Checking melonDS on this Mac…';
+        const line = W.melon && !mac && !W.melon.installed ? 'Install melonDS (Play on melonDS) and Leaflet can set it up here.' : { none: `melonDS on ${HERE} isn’t set up for Wi-Fi yet.`, match: `✅ melonDS on ${HERE} already has this town’s ID.`, other: `melonDS on ${HERE} has a different Wi-Fi ID, so this town would get a new friend code there.`, damaged: `melonDS’s Wi-Fi settings on ${HERE} are damaged; Leaflet can replace them with fresh ones.` }[st] || `Checking melonDS on ${HERE}…`;
         parts.push(h('div', { class: 'sync-row' },
           h('span', { class: 'sync-dot' + (st === 'match' ? ' ok' : '') }), h('span', null, line), h('span', { class: 'spacer' }),
           h('button', { class: 'btn leaf', disabled: W.busy || st === 'match' || !st, onclick: () => setUpMelon(t.userId) }, W.busy ? 'Setting up…' : '🤝 Give melonDS this ID')));
@@ -220,7 +223,7 @@
       parts.push(h('div', { class: 'btn-row', style: { marginTop: '10px' } },
         h('button', { class: 'btn small', onclick: () => downloadWfc(t.userId) }, '⬇︎ wfcsettings.bin for melonDS'),
         h('button', { class: 'btn small', onclick: () => updateWfcFile(t.userId) }, 'Update my own file…')));
-      parts.push(h('div', { class: 'fine', style: { marginTop: '8px' } }, native ? 'Elsewhere, put wfcsettings.bin in melonDS’s folder (next to melonDS.exe on Windows) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.' : 'Put wfcsettings.bin in melonDS’s folder (next to melonDS.exe on Windows; ~/Library/Preferences/melonDS on a Mac) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.'));
+      parts.push(h('div', { class: 'fine', style: { marginTop: '8px' } }, native ? `Elsewhere, put wfcsettings.bin in melonDS’s folder (${mac ? 'next to melonDS.exe on Windows' : '~/Library/Preferences/melonDS on a Mac'}) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.` : 'Put wfcsettings.bin in melonDS’s folder (next to melonDS.exe on Windows; ~/Library/Preferences/melonDS on a Mac) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.'));
     }
     if (W.msg) parts.push(h('div', { class: 'sync-msg' + (W.bad ? ' bad' : ' ok') }, W.msg));
     return [section('🤝 Keep your friend code on an emulator', `From ${src.where}`), h('div', { class: 'card pad sync-wfc' }, parts)];
@@ -238,13 +241,15 @@
     paint();
   };
   // If melonDS hasn't started after a while, macOS is most likely holding it back (first launch of a download).
+  // On Windows the helper starts it directly, so a long wait means something else went wrong.
   let startWatch = 0;
   function watchStart() {
     clearTimeout(startWatch);
     startWatch = setTimeout(() => {
       if (E.phase !== 'starting') return;
-      E.phase = ''; E.blocked = true; sfx.error();
-      E.err = 'melonDS hasn’t opened. If macOS showed a message about it, open Privacy & Security, click Open Anyway next to melonDS, then press Play again. Your town is safe; nothing changed.';
+      E.phase = ''; E.blocked = !!mac; sfx.error();
+      E.err = mac ? 'melonDS hasn’t opened. If macOS showed a message about it, open Privacy & Security, click Open Anyway next to melonDS, then press Play again. Your town is safe; nothing changed.'
+        : 'melonDS hasn’t opened. If Windows showed a message about it, allow it, then press Play again. Make sure Start Leaflet is what opened this window. Your town is safe; nothing changed.';
       paint();
     }, 25000);
   }
@@ -331,8 +336,9 @@
           h('button', { class: 'btn small', disabled: installing, onclick: () => native.postMessage({ cmd: 'emuChooseEmulator' }) }, st.emulator ? 'Change…' : 'Choose…')),
         installing && M.state === 'downloading' ? h('div', { class: 'sync-bar', style: { marginTop: '8px' } }, h('span', { style: { width: `${Math.round(M.progress * 100)}%` } })) : null,
         M.state === 'error' ? h('div', { class: 'sync-msg bad' }, '⚠️ ', M.error) : null,
-        !st.emulator && !installing ? h('div', { class: 'fine', style: { marginTop: '6px' } }, 'Leaflet downloads the latest melonDS from its official GitHub page, checks it against the checksum GitHub publishes, and puts it in your Applications folder. The first time it opens, macOS asks you to allow it (Privacy & Security › Open Anyway), because Apple hasn’t checked it.') : null,
-        h('div', { class: 'fine', style: { marginTop: '10px' } }, 'Use a backup you made yourself from this game card. Leaflet keeps a copy of it in its own play folder on this Mac (never in iCloud), so melonDS can keep the save next to it.'),
+        !st.emulator && !installing ? h('div', { class: 'fine', style: { marginTop: '6px' } }, mac ? 'Leaflet downloads the latest melonDS from its official GitHub page, checks it against the checksum GitHub publishes, and puts it in your Applications folder. The first time it opens, macOS asks you to allow it (Privacy & Security › Open Anyway), because Apple hasn’t checked it.'
+          : 'Leaflet downloads the latest melonDS from its official GitHub page, checks it against the checksum GitHub publishes, and puts it in your user’s Programs folder (no administrator needed). Updating it later keeps its settings.') : null,
+        h('div', { class: 'fine', style: { marginTop: '10px' } }, `Use a backup you made yourself from this game card. Leaflet keeps a copy of it in its own play folder on ${HERE} (${mac ? 'never in iCloud' : 'in your local app data, never in OneDrive'}), so melonDS can keep the save next to it.`),
         E.err ? h('div', { class: 'sync-msg bad' }, h('div', null, '⚠️ ', E.err), blockedHelp()) : null,
         h('div', { class: 'btn-row', style: { marginTop: '12px' } }, h('button', { class: 'btn leaf', disabled: !!emuReady(code) || installing, onclick: playOnEmu }, '🎮 Play on melonDS'), h('button', { class: 'btn', onclick: () => { E.setup = false; paint(); } }, 'Not now')))];
     }
@@ -382,23 +388,196 @@
         h('button', { class: 'btn small', onclick: () => { APP.openBytes(new Uint8Array(r.bytes), `${r.s.str(4, 8)} (${r.name})`); } }, 'Open'),
         h('button', { class: 'btn small', onclick: async () => { if (window.Backups) { const rec = await Backups.add(r.bytes, 'manual', { file: r.name }); toast(rec ? 'Backed up' : 'Already in Backups', '📌'); } } }, 'Back up'),
         connected ? h('button', { class: 'btn small leaf', onclick: () => { S.file = r.s; S.fileName = `${r.name} from the SD card`; S.emuStart = null; startReview(1, 'ds'); } }, 'Send to game card') : null) : null));
-    return [section('🔎 Saves on an SD card', 'R4 and other flashcarts'), h('div', { class: 'card' + (rows.length ? ' bk-list' : ' pad') },
-      F.results && !rows.length ? h('div', { class: 'pad muted', style: { padding: '14px 16px' } }, `No Wild World saves found${F.searched.length ? ` on ${F.searched.join(', ')}` : ''}. Flashcarts keep the save next to the game, with the same name ending in .sav.`) : null,
+    return [section('🔎 Saves on an SD card', 'R4 and other flashcarts, or your 3DS’s SD card'), h('div', { class: 'card' + (rows.length ? ' bk-list' : ' pad') },
+      F.results && !rows.length ? h('div', { class: 'pad muted', style: { padding: '14px 16px' } }, `No Wild World saves found${F.searched.length ? ` on ${F.searched.join(', ')}` : ''}. Flashcarts keep the save next to the game, with the same name ending in .sav; TWiLight Menu++ keeps it in a saves folder beside the game.`) : null,
       rows,
       h('div', { style: { padding: rows.length ? '10px 16px' : 0 } },
-        !F.results ? h('p', { class: 'muted', style: { margin: '0 0 10px' } }, native ? 'Put your flashcart’s microSD card in this Mac. Leaflet looks through every SD card and drive you plug in for Wild World saves, so you can open them, back them up or put them on your game card.' : 'Flashcarts such as the R4 keep each game’s save next to it on the microSD card. Choose the card (or a folder on it) and Leaflet finds every Wild World save there.') : null,
+        !F.results ? h('p', { class: 'muted', style: { margin: '0 0 10px' } }, native ? `Put your flashcart’s microSD card in ${HERE}. Leaflet looks through every SD card and drive you plug in for Wild World saves, so you can open them, back them up or put them on your game card.` : 'Flashcarts such as the R4 keep each game’s save next to it on the microSD card. Choose the card (or a folder on it) and Leaflet finds every Wild World save there.') : null,
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn' + (F.results ? ' small' : ' leaf'), disabled: F.busy, onclick: () => searchSD(false) }, F.busy ? 'Looking…' : native ? (F.results ? 'Look again' : '🔎 Look on SD cards') : '🔎 Choose the SD card…'),
           native ? h('button', { class: 'btn small', disabled: F.busy, onclick: () => searchSD(true) }, 'Choose a folder…') : null)))];
   }
 
-  function disconnect() { clearInterval(infoTimer); Object.assign(S, { phase: 'off', info: null, cart: null, err: '', status: null }); sfx.close(); paint(); }
+  // ---------- the 3DS's own SD card (Leaflet Link 1.3) ----------
+  // Leaflet Link lists Wild World saves on the 3DS's SD card: its own backups (made before each write, or with X on the
+  // console) and the save files of TWiLight Menu++, nds-bootstrap forwarders and other DS loaders.
+  const T = { list: null, busy: false, err: '', job: 0, status: null, target: '', msg: '', bad: false };
+  const feature = f => !!(S.info && (S.info.features || []).includes(f));
+  const IMPORTED_KEY = 'leaflet-link-diary';
+  const imported = { get() { try { return new Set(JSON.parse(localStorage.getItem(IMPORTED_KEY)) || []); } catch (e) { return new Set(); } }, set(v) { try { localStorage.setItem(IMPORTED_KEY, JSON.stringify([...v].slice(-400))); } catch (e) { /* private mode */ } } };
+  // A time on the 3DS's clock ("2026-10-28 14:03:22"), as a time on this computer.
+  function consoleTime(text) {
+    const w = GC && GC.parseWall(text); if (w == null) return null;
+    const d = new Date(w - (S.dsDelta || 0) * 1000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()).getTime();
+  }
+  const showTime = t => t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'date unknown';
+  const fileName = p => p.split('/').pop();
+  // Leaflet Link names each backup for why it was made.
+  const backupWhy = p => /before restoring/.test(p) ? 'Leaflet Link backup, kept before a save was put back' : /before Leaflet/.test(p) ? 'Leaflet Link backup, kept before Leaflet saved over it' : 'Leaflet Link backup, made on the 3DS';
+
+  // Reads one save from the 3DS's SD card, checked against its CRC like the game card (three tries).
+  async function pullSD(path) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 700));
+      const r = await call(`/sd/file?path=${encodeURIComponent(path)}`, {}, 60000);
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `The 3DS answered ${r.status}.`); }
+      let b; try { b = new Uint8Array(await r.arrayBuffer()); } catch (e) { continue; }
+      if (b.length === SIZE && r.headers.get('X-Leaflet-CRC32') === hex8(crc32(b))) return b;
+    }
+    throw new Error('The save didn’t arrive intact, three times in a row. Move the 3DS closer to your router and try again.');
+  }
+  let listing = null;
+  function listSD(quiet) {
+    if (!feature('sd')) return Promise.resolve();
+    if (listing) return listing;   // one look at a time
+    T.busy = true; T.err = ''; if (!quiet) paint();
+    // A busy 3DS (say, waiting for A) keeps the list it had.
+    listing = json('/sd', {}, 30000).then(j => { T.list = j.saves; }, e => { if (!T.list) T.err = e.message; }).then(() => { T.busy = false; listing = null; paint(); });
+    return listing;
+  }
+  // The Town Diary: versions of the town the 3DS kept on its SD card (Leaflet Link's backups, and TWiLight Menu++ saves)
+  // join Backups with the time they were made, so the diary tells what happened on the real console too.
+  async function diaryFromSD() {
+    if (!window.Backups || !feature('sd')) return;
+    await listSD(true);
+    const seen = imported.get(), todo = (T.list || []).filter(x => x.ok && !seen.has(`${x.path}|${x.size}|${x.saved}`)).slice(0, 24);
+    let added = 0;
+    for (const x of todo) {
+      if (S.phase !== 'ready') break;
+      try {
+        const b = await pullSD(x.path);
+        if (await Backups.add(b, x.kind === 'backup' ? 'cartridge' : 'game', { when: consoleTime(x.saved) || Date.now(), file: x.path, history: true })) added++;
+        seen.add(`${x.path}|${x.size}|${x.saved}`); imported.set(seen);
+      } catch (e) { break; }   // try again next time
+    }
+    if (added) toast(`${added} version${added === 1 ? '' : 's'} from your 3DS joined the Town Diary`, '📔');
+  }
+
+  async function openSD(x) {
+    try {
+      const b = await pullSD(x.path), s = parse(b);
+      if (!s) throw new Error('Leaflet can’t read that save.');
+      if (APP.save && APP.save.dirty) {
+        if (!await confirmSheet('Open this town?', `${APP.save.str(4, 8)} has unsaved edits. They’re kept in Backups as unsaved edits, so you can get them back.`, 'Open it')) return;
+        if (window.Backups) await Backups.add(APP.save.export(), 'draft', { file: APP.save.fileName });
+      }
+      await APP.openBytes(b, `${s.str(4, 8)} (${fileName(x.path)}).sav`);
+    } catch (e) { T.err = e.message; sfx.error(); paint(); }
+  }
+  async function cardFromSD(x) {
+    try { const b = await pullSD(x.path), s = parse(b); if (!s) throw new Error('Leaflet can’t read that save.'); S.file = s; S.fileName = `${fileName(x.path)} from the 3DS’s SD card`; S.emuStart = null; startReview(1, 'ds'); }
+    catch (e) { T.err = e.message; sfx.error(); paint(); }
+  }
+  // Puts the town open in Leaflet into a game's save file on the 3DS's SD card (TWiLight Menu++ and forwarders).
+  async function sendToSD(x) {
+    const s = APP.save; if (!s) return;
+    T.err = T.msg = ''; T.bad = false;
+    try {
+      const out = s.export().slice(0, SIZE), o = new WWSave(out, 'out.sav');
+      if (o.region !== x.region) throw new Error(`That save file is from the ${x.region} version of the game, and ${o.str(4, 8)} is from the ${o.region} one. They can’t read each other’s saves.`);
+      const now = await pullSD(x.path), was = parse(now);
+      if (same(now, out)) { T.msg = `${fileName(x.path)} already holds exactly this save.`; sfx.pop(); paint(); return; }
+      const lines = was && townKey(was) === townKey(o) && window.WW_DIARY ? WW_DIARY.diff(was, o) : [];
+      const what = was && townKey(was) !== townKey(o) ? `It replaces ${was.str(4, 8)} in that file.` : lines.length ? `${lines.length} change${lines.length === 1 ? '' : 's'}, such as: ${lines.slice(0, 3).map(l => l[1]).join(' ')}` : 'Small changes the town diary doesn’t describe.';
+      if (!await confirmSheet(`Save ${o.str(4, 8)} to ${fileName(x.path)}?`, `${what} The 3DS keeps a copy of the old file in its backups first, and you confirm there with A.`, 'Send')) return;
+      if (window.Backups && was) await Backups.add(now, 'game', { file: x.path, when: consoleTime(x.saved) || Date.now(), history: true });
+      T.job = (Math.random() * 1e9) >>> 0; T.target = x.path;
+      const q = new URLSearchParams({ path: x.path, crc: hex8(crc32(out)), town: o.str(4, 8), residents: residents(o).join(', '), job: T.job });
+      T.status = await json(`/sd/file?${q}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: out }, 60000);
+      paint();
+      let misses = 0;
+      while (!['done', 'failed', 'idle'].includes(T.status.state)) {
+        await new Promise(r => setTimeout(r, 400));
+        let st;
+        try { st = await json('/status', {}, 5000); misses = 0; } catch (e) { if (++misses > 20) throw new Error('Lost touch with the 3DS. Look at its screen: it says whether the save finished.'); continue; }
+        if (st.job !== T.job) throw new Error('The 3DS moved on to something else. Check its screen.');
+        const moved = st.state !== T.status.state;
+        T.status = st; if (moved) paint();
+      }
+      const st = T.status; T.status = null;
+      if (st.state === 'idle') { T.msg = 'Cancelled on the 3DS. Nothing changed.'; sfx.cancel(); }
+      else if (st.state === 'done') {
+        const back = await pullSD(x.path).catch(() => null);
+        if (back && !same(back, out)) throw new Error('The 3DS saved it, but reading the file back from here found a difference. The old file is in Leaflet Link’s backups; try again.');
+        if (window.Backups) await Backups.add(out, 'sent', { file: x.path });
+        T.msg = `${st.message}${back ? ' Leaflet read it back too: identical.' : ''}`; sfx.save(); UI.confetti();
+      } else { T.msg = st.message; T.bad = true; sfx.error(); }
+      listSD(true);
+    } catch (e) { T.status = null; T.msg = e.message; T.bad = true; sfx.error(); }
+    paint();
+  }
+
+  function consoleSDCard() {
+    if (!feature('sd')) return [];
+    if (!T.list && !T.busy && !T.err) listSD(true);
+    const writable = S.info && S.phase === 'ready' && S.info.card.writable;
+    const st = T.status;
+    if (st) return [section('📀 On your 3DS’s SD card'), h('div', { class: 'card pad sync-update' }, h('span', { class: 'sync-spin' }),
+      h('b', null, st.state === 'confirm' ? `Press A on your 3DS to save into ${fileName(T.target)}.` : st.state === 'backup' ? 'Keeping a copy of the old file…' : 'Saving to the SD card…'),
+      h('span', { class: 'spacer' }), st.state === 'confirm' ? h('button', { class: 'btn small', onclick: cancelOnLeaflet }, 'Cancel') : null)];
+    const rows = (T.list || []).map(x => h('div', { class: 'bk-row' },
+      h('span', { class: 'bk-em' }, !x.ok ? '⚠️' : x.kind === 'backup' ? '🛟' : '🎮'),
+      h('div', { class: 'bk-main' },
+        h('b', null, x.ok ? x.town : `${x.town} (damaged)`),
+        h('div', { class: 'muted' }, `${x.residents || 'No residents'} · ${x.region} · ${x.kind === 'backup' ? 'backed up' : 'saved'} ${showTime(consoleTime(x.saved))}`),
+        h('div', { class: 'muted', style: { fontSize: '11px' } }, x.kind === 'backup' ? backupWhy(x.path) : `${fileName(x.path)} · ${x.path.replace(/\/[^/]*$/, '') || '/'}`)),
+      x.ok ? h('div', { class: 'bk-btns' },
+        h('button', { class: 'btn small', onclick: () => openSD(x) }, 'Open'),
+        writable ? h('button', { class: 'btn small leaf', title: 'Put this town on the game card', onclick: () => cardFromSD(x) }, 'To game card') : null,
+        x.kind === 'game' && APP.save ? h('button', { class: 'btn small', title: `Save ${APP.save.str(4, 8)} (open in Leaflet) into this file`, onclick: () => sendToSD(x) }, `Save ${APP.save.str(4, 8)} here`) : null) : null));
+    return [section('📀 On your 3DS’s SD card', 'Leaflet Link backups · TWiLight Menu++ and forwarder saves'), h('div', { class: 'card' + (rows.length ? ' bk-list' : ' pad') },
+      T.list && !rows.length ? h('div', { class: 'muted', style: { padding: '0 0 10px' } }, 'No Wild World saves on the 3DS’s SD card yet. Press X in Leaflet Link to back up the game card, or play Wild World through TWiLight Menu++ and its save shows up here.') : null,
+      rows,
+      T.err || T.msg ? h('div', { class: 'sync-msg ' + (T.err || T.bad ? 'bad' : 'ok'), style: { margin: rows.length ? '10px 16px' : '0 0 10px' } }, T.err || T.msg) : null,
+      h('div', { style: { padding: rows.length ? '10px 16px' : 0 } }, h('div', { class: 'btn-row' },
+        h('button', { class: 'btn small', disabled: T.busy, onclick: () => { T.msg = ''; listSD(); } }, T.busy ? 'Looking…' : 'Look again'),
+        h('span', { class: 'fine' }, 'Versions found here also join the Town Diary.'))))];
+  }
+
+  // ---------- game card health check (Leaflet Link 1.3) ----------
+  const HC = { status: null, job: false };
+  async function checkCard() {
+    HC.job = true; HC.status = { state: 'checking', progress: 0 }; sfx.click(); paint();
+    try {
+      let st = await json('/health', { method: 'POST' }, 8000);
+      while (st.state === 'checking') {
+        HC.status = st; paint();
+        await new Promise(r => setTimeout(r, 400));
+        st = await json('/status', {}, 5000);
+      }
+      HC.status = st;
+      if (st.state === 'done' && !st.caution) sfx.save(); else if (st.state === 'idle') sfx.cancel(); else sfx.bell();
+    } catch (e) { HC.status = { state: 'failed', title: 'Couldn’t check the game card', message: e.message }; sfx.error(); }
+    HC.job = false; paint();
+  }
+  function healthCard() {
+    const st = HC.status;
+    if (!st) return null;
+    if (st.state === 'checking') return h('div', { class: 'card pad sync-progress' },
+      h('h3', null, '🩺 Checking the game card'), h('p', { class: 'muted' }, 'Reading the save chip six times and comparing every byte. Nothing is written.'),
+      h('div', { class: 'sync-bar' }, h('span', { style: { width: `${Math.round((st.progress || 0) * 100)}%` } })),
+      h('div', { class: 'btn-row', style: { marginTop: '8px' } }, h('button', { class: 'btn small', onclick: cancelOnLeaflet }, 'Stop')));
+    const hl = st.health, good = st.state === 'done' && !st.caution;
+    return h('div', { class: 'card pad sync-result ' + (good ? 'good' : st.state === 'done' ? 'safe' : 'bad') },
+      h('div', { class: 'big' }, good ? '🩺' : st.state === 'done' ? '🧽' : '⚠️'),
+      h('h3', null, st.state === 'idle' ? 'Check stopped' : st.title), h('p', null, st.state === 'idle' ? 'Nothing was changed.' : st.message),
+      hl && st.state === 'done' ? h('ul', { class: 'sync-checks' },
+        h('li', null, `${hl.unstable ? '•' : '✓'} Read ${hl.passes} times${hl.ms >= 500 ? ` in ${(hl.ms / 1000).toFixed(1)} s` : ''}: ${hl.unstable ? `${hl.unstable} of 64 areas changed between reads` : 'identical every time'}`),
+        h('li', null, `${hl.idStable ? '✓' : '•'} The save chip ${hl.idStable ? 'gave the same ID every time' : 'gave different IDs'}`),
+        h('li', null, hl.blank ? '✓ No town saved on it yet' : hl.check ? `• ${hl.checkWhy}` : '✓ Both copies of the town and the town hall letters pass their checksums')) : null,
+      h('div', { class: 'btn-row', style: { justifyContent: 'center', marginTop: '10px' } },
+        h('button', { class: 'btn leaf', onclick: () => { HC.status = null; sfx.click(); paint(); } }, 'Done'),
+        st.state === 'done' && st.caution && hl && hl.unstable ? h('button', { class: 'btn', onclick: checkCard }, 'Check again') : null));
+  }
+
+  function disconnect() { clearInterval(infoTimer); Object.assign(S, { phase: 'off', info: null, cart: null, err: '', status: null }); Object.assign(T, { list: null, err: '', msg: '' }); HC.status = null; sfx.close(); paint(); }
   // Notices the card going in or out while connected.
   function watchInfo() {
     clearInterval(infoTimer);
     infoTimer = setInterval(async () => {
       if (!root || !root.isConnected) { clearInterval(infoTimer); return; }
-      if (S.phase === 'sending' || S.reading) return;
+      if (S.phase === 'sending' || S.reading || HC.job || T.status) return;
       try {
         const j = await json('/info', {}, 5000);
         const was = S.info && S.info.card;
@@ -428,8 +607,11 @@
   }
   async function readCart() {
     S.reading = true; S.err = ''; paint();
-    try { const b = await pull(); S.cart = { bytes: b, save: parse(b), blank: blank(b) }; S.cartAt = Date.now(); }
-    catch (e) { S.err = e.message; sfx.error(); }
+    try {
+      const b = await pull(); S.cart = { bytes: b, save: parse(b), blank: blank(b) }; S.cartAt = Date.now();
+      // Every read is a page of the Town Diary (an unchanged card adds nothing).
+      if (window.Backups && S.cart.save) Backups.add(b, 'cartridge');
+    } catch (e) { S.err = e.message; sfx.error(); }
     S.reading = false; paint();
   }
 
@@ -603,7 +785,8 @@
     const dot = ok => h('span', { class: 'sync-dot' + (ok ? ' ok' : ok === null ? ' wait' : '') });
     return h('div', { class: 'card pad sync-status' },
       h('div', { class: 'sync-line' }, dot(true), h('span', null, h('b', null, 'Connected'), ` to Leaflet Link ${S.info.version} at ${S.addr.trim()}`), h('span', { class: 'spacer' }), h('button', { class: 'btn small', onclick: disconnect }, 'Disconnect')),
-      h('div', { class: 'sync-line' }, dot(c.ready && c.writable), h('span', null, c.ready ? h('b', null, `Animal Crossing: Wild World (${c.code})`) : h('b', null, c.present ? 'Game card not ready' : 'No game card'), c.ready ? (c.writable ? ', save chip ready' : `: ${c.why}`) : ` · ${c.why}`)),
+      h('div', { class: 'sync-line' }, dot(c.ready && c.writable), h('span', null, c.ready ? h('b', null, `Animal Crossing: Wild World (${c.code})`) : h('b', null, c.present ? 'Game card not ready' : 'No game card'), c.ready ? (c.writable ? ', save chip ready' : `: ${c.why}`) : ` · ${c.why}`),
+        h('span', { class: 'spacer' }), feature('health') && c.ready && c.writable && S.phase === 'ready' ? h('button', { class: 'btn small', disabled: HC.job || S.reading, title: 'Reads the save chip six times to make sure it reads the same every time. Nothing is written.', onclick: checkCard }, '🩺 Check the card') : null),
       p && !p.ok ? h('div', { class: 'sync-line' }, dot(false), h('span', null, h('b', null, 'Battery low. '), 'Plug in the 3DS before saving to the cartridge.')) : null,
       S.dsDelta != null && Math.abs(S.dsDelta) >= 60 ? h('div', { class: 'sync-line' }, h('span', { class: 'sync-dot ok' }), h('span', null, h('b', null, '🕰 3DS clock: '), `${GC.span(S.dsDelta)} ${S.dsDelta > 0 ? 'ahead of' : 'behind'} this computer. Leaflet keeps your town’s time in step when it moves, so turnips don’t spoil.`)) : null);
   }
@@ -620,11 +803,11 @@
     const c = S.cart;
     if (S.reading && !c) return h('div', { class: 'card pad sync-reading' }, h('span', { class: 'sync-spin' }), 'Reading your game card…');
     if (!c) return S.info.card.ready ? h('div', { class: 'card pad' }, h('button', { class: 'btn leaf', onclick: readCart }, 'Read the game card')) : null;
-    const tile = (em, title, desc, onclick, dis) => h('button', { class: 'sync-tile', disabled: !!dis, onclick }, h('span', { class: 'em' }, em), h('b', null, title), h('span', null, desc));
+    const tile = (em, title, desc, onclick, dis) => h('button', { class: 'sync-tile', disabled: !!dis || HC.job, onclick }, h('span', { class: 'em' }, em), h('b', null, title), h('span', null, desc));
     return [
       section('On your game card', S.reading ? 'Reading…' : `Read at ${new Date(S.cartAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`),
       h('div', { class: 'card pad' },
-        h('div', { class: 'sync-row' }, townSummary(c.save, c.bytes), h('span', { class: 'spacer' }), h('button', { class: 'btn small', disabled: S.reading, onclick: readCart }, 'Read again')),
+        h('div', { class: 'sync-row' }, townSummary(c.save, c.bytes), h('span', { class: 'spacer' }), h('button', { class: 'btn small', disabled: S.reading || HC.job, onclick: readCart }, 'Read again')),
         h('div', { class: 'sync-tiles' },
           tile('📖', 'Open in Leaflet', 'Edit the town on the card. Save to a file as usual.', openInLeaflet, !c.save),
           native ? tile('🎮', 'Play on melonDS', 'Starts melonDS with this town and brings it back to the card when you’re done.', playOnEmu, !c.save || E.phase === 'playing' || E.phase === 'starting' || (E.phase === 'back' && E.session)) : null,
@@ -687,7 +870,7 @@
   function clockLine(out) {
     if (!GC) return null;
     if (S.dsDelta == null) return h('div', { class: 'sync-clock' }, '🕰 Update Leaflet Link to keep your town’s clock in step: this version doesn’t say what time the 3DS shows.');
-    const where = S.emuStart ? h('b', null, 'melonDS on this Mac') : (() => {
+    const where = S.emuStart ? h('b', null, `melonDS on ${HERE}`) : (() => {
       const sel = h('select', { class: 'field w-l' }, [['emu', 'an emulator on this computer'], ['ds', 'a DS or 3DS']].map(([v, l]) => h('option', { value: v, selected: S.playedOn === v }, l)));
       sel.onchange = () => { S.playedOn = sel.value; sfx.click(); paint(); };
       return sel;
@@ -743,7 +926,7 @@
       if (S.phase === 'sending') out.push(progressCard());
       else if (S.phase === 'result') out.push(resultCard());
       else if (S.phase === 'review') out.push(...reviewCard());
-      else out.push(...[cartCard()].flat().filter(Boolean), errBox(), ...wfcCard());
+      else out.push(healthCard(), ...[cartCard()].flat().filter(Boolean), errBox(), ...consoleSDCard(), ...wfcCard());
     }
     if (!['sending', 'result', 'review'].includes(S.phase)) out.push(...sdCard());
     out.push(h('div', { class: 'fine sync-fine' }, 'Leaflet Link only reads and writes the save on your own game card. It doesn’t copy the game itself. Writing only happens after you confirm on the 3DS.'));

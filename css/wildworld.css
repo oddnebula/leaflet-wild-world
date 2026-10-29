@@ -599,9 +599,11 @@ canvas.model3d:active { cursor: grabbing; }
 .sync-result p { max-width: 560px; margin: 4px auto 0; line-height: 1.5; }
 .sync-result.bad h3 { color: #b0452c; }
 .sync-checks { list-style: none; padding: 0; margin: 12px auto 0; display: inline-flex; flex-direction: column; gap: 4px; text-align: left; font-size: 13px; font-weight: 700; color: #2f6b2f; }
-.sync-fine { margin-top: 18px; text-align: center; }
+/* Notes that sit on the patterned backdrop get a cream pill, so they stay readable on any season's pattern. */
+.page > .muted:not(.card) { width: fit-content; max-width: 100%; padding: 5px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ww-cream) 92%, transparent); color: var(--text-2); }
+.sync-fine { margin: 18px auto 0; text-align: center; width: fit-content; max-width: 100%; padding: 6px 14px; border-radius: 999px; background: color-mix(in srgb, var(--ww-cream) 92%, transparent); color: var(--text-2); }
 @media (max-width: 560px) { .sync-compare { grid-template-columns: 1fr; } .sync-compare .arrow { transform: rotate(90deg); justify-self: center; } .sync-confirm { flex-direction: column; text-align: center; } }
-.sync-install-mini { margin: 4px 2px 0; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.sync-install-mini { margin: 4px 0 0; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; width: fit-content; padding: 4px 6px 4px 14px; border-radius: 999px; background: color-mix(in srgb, var(--ww-cream) 92%, transparent); }
 .sync-addr.small { font-size: 15px !important; height: 44px !important; width: 190px !important; font-weight: 700; }
 .sync-update { display: flex; align-items: center; gap: 12px; font-size: 13.5px; line-height: 1.45; background: linear-gradient(#eef8e4, #eef8e4) padding-box, repeating-linear-gradient(45deg, #b7dc9b 0 6px, #d6eec4 6px 12px) border-box !important; }
 .sync-update.bad { background: linear-gradient(#fff0e8, #fff0e8) padding-box, repeating-linear-gradient(45deg, #f0b49c 0 6px, #f8d6c8 6px 12px) border-box !important; }
