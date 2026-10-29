@@ -102,6 +102,9 @@
         const n = NPARAM[c] || 0, a = []; for (let i = 0; i < n; i++) a.push(u32(dl, p + i * 4)); p += 4 * n;
         if (c === 0x14) cur = stack[a[0] & 31] || cur;
         else if (c === 0x20) col = [(a[0] & 31) / 31, ((a[0] >> 5) & 31) / 31, ((a[0] >> 10) & 31) / 31];
+        // A normal makes the DS light the vertex itself (replacing its colour). With lightNormals on, a soft light from
+        // above stands in for the game's lights; otherwise the colour is kept as before.
+        else if (c === 0x21 && window.Model3D.lightNormals) { const ny = sx((a[0] >> 10) & 0x3FF, 10) / 512, nz = sx((a[0] >> 20) & 0x3FF, 10) / 512, k = Math.min(1, 0.62 + 0.3 * Math.max(0, ny) + 0.12 * Math.max(0, nz)); col = [k, k, k]; }
         else if (c === 0x22) uv = [sx(a[0] & 0xFFFF, 16) / 16, sx(a[0] >>> 16, 16) / 16];
         else if (c === 0x23) { pos = [sx(a[0] & 0xFFFF, 16) / 4096, sx(a[0] >>> 16, 16) / 4096, sx(a[1] & 0xFFFF, 16) / 4096]; emit(); }
         else if (c === 0x24) { pos = [sx(a[0] & 0x3FF, 10) / 64, sx((a[0] >> 10) & 0x3FF, 10) / 64, sx((a[0] >> 20) & 0x3FF, 10) / 64]; emit(); }
@@ -363,5 +366,5 @@
     return canvas;
   }
 
-  window.Model3D = { villagerMesh, playerMesh, viewer, parseModel, runSBC, runDL, parseTex, decodeTex, patternTex, modelGroups, ownTex };
+  window.Model3D = { lightNormals: false, villagerMesh, playerMesh, viewer, parseModel, runSBC, runDL, parseTex, decodeTex, patternTex, modelGroups, ownTex };
 })();

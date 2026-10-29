@@ -62,8 +62,10 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 - [x] Arrange furniture in 3D: drag, nudge, turn and put away pieces in the 3D room, each with its whole footprint (the
   2D editor now moves footprints too when the ROM is open).
 - [x] Photo mode: postcards from the 3D town, house rooms, neighbors' rooms and Celeste's sky.
-- [ ] The town with the game's own models from the player's ROM: acre ground (bg/a*), trees by season, flowers, weeds,
-  rocks (fg/).
+- [x] The town with the game's own models from the player's ROM: acre ground (bg/a*, unbent from the rolling world) in
+  the save's ground season, trees, flowers, weeds and rocks (fg/), every building (str/), neighbours' own houses (their
+  house byte from the main code) and the gate. Still approximate: leaf colours by date (the game's table isn't decoded),
+  fruit colours, and walking collisions (from Leaflet's acre shapes, not the acre's tile table).
 
 **Chunk B: for planners and completionists**
 - [ ] Town planner: paint trees, flowers and paths over the map with each acre's perfect-town status updating live.

@@ -107,5 +107,5 @@
     const d = ROM.file('ftr_info/dma.bin'); if (!d) return 1;
     return d[Math.min((id - 0x3000) >> 2, 0x6E8) * 0x1C + 3] / 16;
   }
-  window.Room3D = { scene, piece, footprint, height, TILE };
+  window.Room3D = { scene, piece, footprint, height, TILE, narcFind };
 })();

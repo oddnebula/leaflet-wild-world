@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   const DB = 'leaflet-rom', STORE = 'files', KEY = 'ADME';
-  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^font\/fontA_(head|attr|img)\.bin$/, /^myOrg\//];
+  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^bg\/(a[0-8]|ct[0-2])\//, /^str\//, /^fg\/(tree|flower|grass|stone|hole)\//, /^font\/fontA_(head|attr|img)\.bin$/, /^myOrg\//, /^leaflet\/houses\.bin$/];
   let files = null;            // Map path -> Uint8Array (raw, possibly compressed)
   let stale = false;           // a cache from an older Leaflet that lacks files this version reads (the start card asks for the ROM again)
   const listeners = new Set();
@@ -75,6 +75,35 @@
     listeners.forEach(f => f());
   }
 
+  // The game's main code is stored "bottom-LZ" compressed: read backwards from a footer at its end.
+  function blz(b) {
+    const n = b.length; if (n < 8) return b;
+    const enc = b[n - 8] | (b[n - 7] << 8) | (b[n - 6] << 16) | (b[n - 5] << 24), inc = (b[n - 4] | (b[n - 3] << 8) | (b[n - 2] << 16) | (b[n - 1] << 24)) >>> 0;
+    const hdr = enc >>> 24, clen = enc & 0xFFFFFF; if (!inc || hdr < 8 || clen > n) return b;
+    const out = new Uint8Array(n + inc); out.set(b);
+    let src = n - hdr, dst = out.length; const stop = n - clen;
+    while (src > stop) {
+      let flags = b[--src];
+      for (let k = 0; k < 8 && src > stop; k++, flags <<= 1) {
+        if (flags & 0x80) { const hi = b[--src], lo = b[--src], disp = (((hi & 0xF) << 8) | lo) + 3; for (let m = (hi >> 4) + 3; m > 0; m--) { dst--; out[dst] = out[dst + disp]; } }
+        else out[--dst] = b[--src];
+      }
+    }
+    return out;
+  }
+  // Each villager's house (sNpcInfo, 0x4E bytes per villager in the main code at 0x020CC408 in the USA game; byte +0x28:
+  // model 0–19 in the low five bits, which of the town's four house textures above them). Stored as leaflet/houses.bin.
+  function houses(rom, code) {
+    const out = new Uint8Array(4 + 150); out.set([0x4C, 0x46, 0x48, 0x31]);   // "LFH1"; zeros when unknown
+    if (code !== 'ADME') return out;
+    const u32 = (d, o) => (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) >>> 0;
+    try {
+      const off = u32(rom, 0x20), ram = u32(rom, 0x28), size = u32(rom, 0x2C), arm9 = blz(rom.subarray(off, off + size)), t = 0x020CC408 - ram;
+      if (arm9.length < t + 150 * 0x4E) return out;
+      for (let i = 0; i < 150; i++) out[4 + i] = arm9[t + i * 0x4E + 0x28];
+    } catch (e) { /* leave zeros */ }
+    return out;
+  }
   async function open(bytes) {
     const rom = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     const code = String.fromCharCode(...rom.subarray(0xC, 0x10));
@@ -82,6 +111,7 @@
     const map = new Map();
     for (const [path, s, e] of listFS(rom)) if (WANT.some(re => re.test(path))) map.set(path, rom.slice(s, e));
     if (!map.has('menu/icon/b_obj_itm.bpl')) throw new Error('The ROM’s pocket icons couldn’t be found.');
+    map.set('leaflet/houses.bin', houses(rom, code));
     files = map; stale = false; iconCache.clear(); picCache.clear(); sheetCache.clear();
     loadSound();
     await saveCache(map);

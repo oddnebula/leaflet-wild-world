@@ -40,6 +40,12 @@ If you choose to open a ROM:
   save editors publish. Sources and licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - **Your own saves only.** Leaflet is meant for editing saves of games you own, for personal use.
 
+## 3D models
+
+The 3D town, rooms and characters use the game's models and textures only when you open your own ROM: they're read
+from it on your computer and kept in Leaflet's local storage like the rest of your game art. Leaflet ships none of them;
+without a ROM, the town is drawn by Leaflet itself.
+
 ## Designs
 
 Leaflet's pattern pack is original work, drawn for Leaflet; it copies no design from the game, its guide books or other players. Wendell's designs are listed by name from your own ROM, and only the ones already in your own saves can be copied into a slot. Leaflet doesn't include or download any of them.

@@ -83,3 +83,17 @@ Scanned every call to the flag functions in main and all overlays, including C++
 - **Never used by any code:** resident 52 and 58–63; town 10 and 21–31.
 - Still only placed by overlay, not by meaning: resident 0, 5, 9, 10, 13, 15, 22, 27, 35, 49, 50, 57 and town 0, 5–9, 12,
   14, 16–20. Their dialogue text (in the ROM's message archives) is the way to name them.
+
+## Town models (2026-10-29)
+- Acre `n` is `bg/a{n>>4}/{n:04x}.arc`: NARC of an 8-byte header, the BMD0 ground and 384 bytes (a 16×16 tile-type table,
+  then 128 bytes of nibbles). Ground models are pre-bent around a circle of radius 32 (one acre) centred 0.62 below the
+  model origin: flat z = 32·atan2(z, y + 0.62), height = hypot(z, y + 0.62) − 32. Two model units per map spot.
+- Ground textures: `/bg/ct%d/grd_set%d%c.nsbtx` with the grass pattern and `'a' +` the ground season, both from 0xE554.
+- Buildings: `/str/arc/%d/str%d%c.arc` (+ `.nsbtx`, `_lt.nsbtx` night lights), n = building item & 0xFF, c = s/w; palette
+  `house_pl` lives in `str/house_pl/house_pl_{s,w}.nsbtx`. Player house roof `/str/plHsTex/home%c%c.nsbtx`. Gate
+  `str/chkp/obj_check{0x15B58}`.
+- Neighbour houses: `/str/npcHs/%d/obj_house%d_%d%c.arc`; the model is the low 5 bits of byte +0x28 of the villager's
+  0x4E-byte record at 0x020CC408 (USA main code, BLZ-compressed in the ROM), and bits 5–6 pick one of the four town
+  house textures `/str/npcHsTex/%c/house_%c%d%c.nsbtx` from the style bytes at 0x1592C (v/5 → A–E, v%5).
+- Trees: `fg/tree/{tree,cedar,palm}_mdl/{kind}_{baby,01–04,dead}{s,f,w}`; leaves take one of 22 palettes in
+  `tree_pal/tree_set{A,B,C}` (per grass pattern). Flower colours from `fg/flower/{kind}/{kind}_palette.nsbtx`.

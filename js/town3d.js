@@ -184,7 +184,7 @@
         const xs = foot.map(f => f[0]), ys = foot.map(f => f[1]);
         let x0 = Math.min(...xs), x1 = Math.max(...xs) + 1, z0 = Math.min(...ys), z1 = Math.max(...ys) + 1;
         foot.forEach(([fx, fy]) => { solid[fy * N + fx] = 1; what[fy * N + fx] = name; });
-        buildings.push({ name, x0, z0, x1, z1 });
+        buildings.push({ name, id, x0, z0, x1, z1 });
         let [, wallC, roofC, hgt] = BUILD.find(([re]) => re.test(name)) || [0, '#e8d8b8', '#8a6a4a', 1.6];
         if (/Neighbor House #(\d)/.test(name)) { const v = +RegExp.$1 - 1; wallC = NEIGHBOR_COLORS[v % 8]; roofC = ['#c8553d', '#4f7fd6', '#3f8f4f', '#9a6fd1', '#e0ae12', '#8a5a32', '#d0607a', '#3a3a44'][v % 8]; }
         if (/Sign|Board|Mailbox|Countdown/.test(name)) { B.box(x0 + 0.3, base, z0 + 0.4, x1 - 0.3, base + hgt, z0 + 0.55, hexc(wallC)); continue; }
@@ -200,7 +200,10 @@
   }
 
   // ---------- the viewer: walk, or look from above ----------
-  const opt = { hour: -1, wx: -1, music: false };   // -1: follow the save
+  // With the player's ROM, the town can be drawn with the game's own models (js/townmodels.js).
+  const VS2 = 'attribute vec3 p; attribute vec2 uv; attribute vec3 c; uniform mat4 m; varying vec2 vuv; varying vec3 vc; varying float d; void main() { vec4 q = m * vec4(p, 1.0); gl_Position = q; vuv = uv; vc = c; d = q.w; }';
+  const FS2 = 'precision mediump float; varying vec2 vuv; varying vec3 vc; varying float d; uniform sampler2D tex; uniform vec3 fog; uniform vec3 light; uniform float far; uniform float night; uniform float glow; void main() { vec4 t = texture2D(tex, vuv); if (t.a < 0.5) discard; vec3 base = t.rgb * vc; vec3 col = mix(base * light, base * 1.1, glow * night); float f = clamp((d - far * 0.35) / (far * 0.65), 0.0, 1.0); gl_FragColor = vec4(mix(col, fog, f * (1.0 - glow * night * 0.6)), 1.0); }';
+  const opt = { hour: -1, wx: -1, music: false, art: 'game' };   // -1: follow the save; art: 'game' (ROM models) or 'leaflet'
   function townView(s) {
     const W = Math.min(960, Math.max(320, (document.getElementById('content')?.clientWidth || 900) - 110)), H = Math.round(W * 0.58);
     const canvas = h('canvas', { class: 'town3d', tabindex: 0, width: W * 2, height: H * 2, style: { width: W + 'px', height: H + 'px' } });
@@ -218,6 +221,32 @@
     };
     const uM = gl.getUniformLocation(prog, 'm'), uFog = gl.getUniformLocation(prog, 'fog'), uFar = gl.getUniformLocation(prog, 'far'), uLight = gl.getUniformLocation(prog, 'light'), uNight = gl.getUniformLocation(prog, 'night');
     gl.enable(gl.DEPTH_TEST);
+    // The game's models: one buffer and texture per batch, built once per visit.
+    const canGame = !!(window.TownModels && TownModels.available());
+    let game = null;
+    if (canGame && opt.art === 'game') {
+      try {
+        const list = TownModels.build(s, { date: today, snowy: season === 'snow', buildings: T.buildings });
+        const p2 = gl.createProgram(); gl.attachShader(p2, sh(gl.VERTEX_SHADER, VS2)); gl.attachShader(p2, sh(gl.FRAGMENT_SHADER, FS2)); gl.linkProgram(p2);
+        const L2 = { p: gl.getAttribLocation(p2, 'p'), uv: gl.getAttribLocation(p2, 'uv'), c: gl.getAttribLocation(p2, 'c'), m: gl.getUniformLocation(p2, 'm'), fog: gl.getUniformLocation(p2, 'fog'), light: gl.getUniformLocation(p2, 'light'), far: gl.getUniformLocation(p2, 'far'), night: gl.getUniformLocation(p2, 'night'), glow: gl.getUniformLocation(p2, 'glow') };
+        const texs = new Map();
+        const batches = list.map(b => {
+          const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, b.data, gl.STATIC_DRAW);
+          const key = b.tex, wrap = `${b.repS}${b.flipS}${b.repT}${b.flipT}`;
+          let tx = texs.get(key) && texs.get(key)[wrap];
+          if (!tx) {
+            tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, b.tex.w, b.tex.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(b.tex.px.buffer));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            const wr = (rep, flip) => rep ? (flip ? gl.MIRRORED_REPEAT : gl.REPEAT) : gl.CLAMP_TO_EDGE;
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wr(b.repS, b.flipS)); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wr(b.repT, b.flipT));
+            texs.set(key, { ...(texs.get(key) || {}), [wrap]: tx });
+          }
+          return { buf, tx, n: b.data.length / 8, glow: b.glow };
+        });
+        if (batches.length) game = { prog: p2, L: L2, batches };
+      } catch (e) { game = null; }
+    }
 
     // Start a few steps in front of the first resident's house (doors face south), else the town hall, else the middle,
     // on the nearest spot you can stand on.
@@ -262,9 +291,26 @@
       let eye, at, far;
       if (sky.on) { const cx = 32, cz = 32; eye = [cx + Math.sin(sky.yaw) * Math.cos(sky.pitch) * sky.dist, Math.sin(sky.pitch) * sky.dist, cz + Math.cos(sky.yaw) * Math.cos(sky.pitch) * sky.dist]; at = [cx, 0, cz]; far = 220; }
       else { eye = [me.x, 1.25, me.z]; at = [me.x + Math.sin(me.yaw) * Math.cos(me.pitch), 1.25 + Math.sin(me.pitch), me.z + Math.cos(me.yaw) * Math.cos(me.pitch)]; far = M.wet ? 26 : 34; }
-      gl.uniformMatrix4fv(uM, false, mul(persp(1.0, W / H, 0.1, 400), look(eye, at)));
+      const MV = mul(persp(1.0, W / H, 0.1, 400), look(eye, at));
+      if (game) {
+        // Night-light textures (lit windows) only show after dark.
+        const { prog: p2, L } = game; gl.useProgram(p2);
+        gl.uniformMatrix4fv(L.m, false, MV); gl.uniform3fv(L.fog, M.fog); gl.uniform3fv(L.light, M.light); gl.uniform1f(L.night, M.night); gl.uniform1f(L.far, far);
+        for (const k of [loc.p, loc.c, loc.g]) gl.disableVertexAttribArray(k);
+        for (const b of game.batches) {
+          if (b.glow && M.night < 0.35) continue;
+          gl.uniform1f(L.glow, b.glow); gl.bindTexture(gl.TEXTURE_2D, b.tx); gl.bindBuffer(gl.ARRAY_BUFFER, b.buf);
+          gl.enableVertexAttribArray(L.p); gl.vertexAttribPointer(L.p, 3, gl.FLOAT, false, 32, 0);
+          gl.enableVertexAttribArray(L.uv); gl.vertexAttribPointer(L.uv, 2, gl.FLOAT, false, 32, 12);
+          gl.enableVertexAttribArray(L.c); gl.vertexAttribPointer(L.c, 3, gl.FLOAT, false, 32, 20);
+          gl.drawArrays(gl.TRIANGLES, 0, b.n);
+        }
+        for (const k of [L.p, L.uv, L.c]) gl.disableVertexAttribArray(k);
+        gl.useProgram(prog);
+      }
+      gl.uniformMatrix4fv(uM, false, MV);
       gl.uniform3fv(uFog, M.fog); gl.uniform3fv(uLight, M.light); gl.uniform1f(uNight, M.night); gl.uniform1f(uFar, far);
-      bind(stat); gl.drawArrays(gl.TRIANGLES, 0, stat.n);
+      if (!game) { bind(stat); gl.drawArrays(gl.TRIANGLES, 0, stat.n); }
       dynamic(M); if (dyn.n) { bind(dyn); gl.drawArrays(gl.TRIANGLES, 0, dyn.n); }
       const clock = `${Math.floor(M.hour) % 12 || 12} ${Math.floor(M.hour) % 24 < 12 ? 'AM' : 'PM'} · ${M.snow ? 'Snow' : WX_WORD[M.lv]}`;
       if (!sky.on) {
@@ -328,15 +374,19 @@
     const hours = [[-1, '🕰️ Game clock'], ...[...Array(24).keys()].map(x => [x, `${x % 12 || 12} ${x < 12 ? 'AM' : 'PM'}`])];
     const hourSel = UI.selectInput(hours, () => opt.hour, v => { opt.hour = v; frame(); kick(); }, { width: 'w-m' });
     const wxSel = UI.selectInput([[-1, pat === null ? '⛅ Save (not rolled)' : '⛅ Save’s weather'], [0, '☀️ Clear'], [2, '☁️ Cloudy'], [3, snowy ? '❄️ Snow' : '🌧️ Rain'], [4, snowy ? '❄️ Heavy snow' : '⛈️ Heavy rain']], () => opt.wx, v => { opt.wx = v; drops.length = 0; frame(); kick(); }, { width: 'w-m' });
+    const art = canGame ? h('button', { class: 'btn small', title: 'Switch between the game’s own models and Leaflet’s drawing' }, opt.art === 'game' ? '✏️ Leaflet drawing' : '🎮 Game models') : null;
+    if (art) art.onclick = () => { opt.art = opt.art === 'game' ? 'leaflet' : 'game'; sfx.click(); const card = canvas.closest('.town3d-card'); card && card.replaceWith(townView(s)); };
     const photo = Postcard.button(() => { frame(); return canvas; }, () => `${sky.on ? 'Above' : 'Walking in'} ${s.str(4, 8)}`, `${s.str(4, 8)} postcard`);
     frame(); kick();
     const SEASON_WORD = { spring: 'Spring', bloom: 'Cherry blossoms', summer: 'Summer', fall: 'Autumn', winter: 'Winter', snow: 'Snow on the ground' };
     return h('div', { class: 'card pad town3d-card' },
       h('div', { class: 'town3d-bar' }, info, h('span', { class: 'spacer' }), mode),
       canvas,
-      h('div', { class: 'town3d-bar town3d-tools' }, hourSel, wxSel, music, photo, h('span', { class: 'spacer' }),
+      h('div', { class: 'town3d-bar town3d-tools' }, hourSel, wxSel, music, photo, art, h('span', { class: 'spacer' }),
         h('span', { class: 'muted', style: { fontSize: '12px' } }, SEASON_WORD[season])),
-      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Every tree, flower, rock and building is where your save has it, lit by the game clock with the weather the game rolled for today. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
+      h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, game
+        ? 'Drawn with the game’s own acres, trees, flowers and buildings from your ROM, laid out flat to walk on and lit by the game clock with the weather the game rolled for today. Leaf colours follow the date (approximate).'
+        : 'Every tree, flower, rock and building is where your save has it, lit by the game clock with the weather the game rolled for today. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
   }
 
   VIEWS.push({
