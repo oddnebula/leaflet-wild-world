@@ -34,11 +34,11 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [x] Constellation share codes and pictures on Celeste's Sky. A library of famous shapes is still to draw.
 
 **Chunk 4: more 3D (from your own ROM)**
-- [ ] Your resident in 3D: outfit, hair, tan, held tool.
-- [ ] Neighbors' houses in 3D.
-- [ ] A 3D night sky with Celeste's constellations.
+- [x] Your resident in 3D: outfit, hair, tan, held tool (already on each resident's page).
+- [x] Neighbors' houses in 3D: their room layout from the ROM, with the game's own furniture, wallpaper and flooring.
+- [x] A night sky you can turn, with every constellation in town (Celeste's Sky).
 - [ ] Main Street in 3D: Nook's with this week's stock, the Able Sisters, the museum.
-- [ ] Walk around the whole town in 3D.
+- [ ] Walk around the whole town in 3D (next).
 
 **Chunk 5: polish**
 - [ ] Compare any two backups.

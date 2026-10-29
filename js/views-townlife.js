@@ -163,6 +163,60 @@
     cv.toBlob(b => { const a = h('a', { href: URL.createObjectURL(b), download: `${name || 'Constellation'}.png` }); document.body.append(a); a.click(); a.remove(); });
     sfx.pop();
   }
+  // Look up: every constellation in the town's sky on a dome you can turn, the way Celeste's telescope shows it. The
+  // 64×32 sky grid wraps around the horizon (x) and climbs from near the horizon to near the top (y). Drawn by Leaflet.
+  function skyDome(s, current) {
+    const W = 640, H = 340, cv = h('canvas', { class: 'sky-dome', width: W * 2, height: H * 2, title: 'Drag to look around' });
+    const ctx = cv.getContext('2d'); ctx.scale(2, 2);
+    const used = s.u16(SKY + 0x460), cons = [];
+    for (let k = 0; k < 16; k++) {
+      if (!((used >> k) & 1)) continue;
+      const o = SKY + k * REC, lines = range(16).map(i => s.u16(o + 0x26 + i * 2)).filter(n => n !== 0xFFFF && n < D.skyLines.length);
+      if (lines.length) cons.push({ k, name: s.str(o + 0x16, 16), lines });
+    }
+    const stars = new Set(); D.skyLines.forEach(c => c.forEach(([x, y]) => stars.add(x + ',' + y)));
+    let yaw = 0, pitch = 0.45;
+    const first = cons.find(c => c.k === current) || cons[0];
+    if (first) { const [x] = D.skyLines[first.lines[0]][0]; yaw = x / 64 * Math.PI * 2; }
+    const dir = (x, y) => { const az = x / 64 * Math.PI * 2, el = (10 + (1 - y / 32) * 72) * Math.PI / 180; return [Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)]; };
+    const project = ([x, y, z]) => {
+      const cy = Math.cos(-yaw), sy = Math.sin(-yaw), x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+      const cp = Math.cos(pitch), sp = Math.sin(pitch), y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+      return z2 > 0.05 ? [W / 2 + x1 / z2 * 330, H * 0.62 - y2 / z2 * 330] : null;
+    };
+    function draw() {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0d1333'); g.addColorStop(1, '#3a3f86');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      for (const k of stars) { const p = project(dir(...k.split(',').map(Number))); if (p) { ctx.beginPath(); ctx.arc(p[0], p[1], 1.3, 0, 7); ctx.fill(); } }
+      for (const c of cons) {
+        const on = c.k === current;
+        ctx.strokeStyle = on ? '#ffe48a' : 'rgba(190,210,255,.75)'; ctx.lineWidth = on ? 3 : 2; ctx.lineCap = ctx.lineJoin = 'round';
+        ctx.shadowColor = on ? '#ffd84a' : 'transparent'; ctx.shadowBlur = on ? 10 : 0;
+        let label = null;
+        for (const n of c.lines) {
+          const pts = D.skyLines[n].map(([x, y]) => project(dir(x, y)));
+          ctx.beginPath(); let started = false;
+          for (const p of pts) { if (!p) { started = false; continue; } if (started) ctx.lineTo(p[0], p[1]); else { ctx.moveTo(p[0], p[1]); started = true; } if (!label || p[1] < label[1]) label = p; }
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        if (label) { ctx.fillStyle = on ? '#fff3b8' : 'rgba(225,232,255,.9)'; ctx.font = '800 13px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.name || 'Untitled', label[0], label[1] - 12); }
+      }
+      // Hills on the horizon.
+      ctx.fillStyle = '#1d3b2c'; ctx.beginPath(); ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 8) ctx.lineTo(x, H - 34 - 14 * Math.sin(x / 70 + yaw * 3) - 8 * Math.sin(x / 23 + yaw * 7));
+      ctx.lineTo(W, H); ctx.fill();
+    }
+    let drag = null;
+    cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY, yaw, pitch]; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', e => { if (!drag) return; yaw = drag[2] - (e.clientX - drag[0]) * 0.006; pitch = Math.max(0.05, Math.min(1.3, drag[3] + (e.clientY - drag[1]) * 0.005)); draw(); });
+    cv.addEventListener('pointerup', () => { drag = null; });
+    draw();
+    return h('div', { class: 'card pad' }, cv, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } },
+      cons.length ? `${cons.length} constellation${cons.length === 1 ? '' : 's'} in your sky · drag to look around · the one you’re editing glows` : 'No constellations yet. Draw one below, or ask Celeste at the observatory.'));
+  }
+
   VIEWS.push({
     id: 'sky', group: 'Places', icon: '✨', title: () => 'Celeste’s Sky', sub: () => 'The constellations your town has made',
     tips: ['Celeste lets you design constellations from the observatory; up to 16 are kept.', 'A constellation can also arrive with a villager moving in from another town.'],
@@ -171,6 +225,7 @@
       const opts = [...range(16).map(k => [k, `${k + 1}. ${s.str(SKY + k * REC + 0x16, 16) || ((used >> k) & 1 ? '(unnamed)' : '(free slot)')}`]), [16, 'From another town (town exchange)']];
       const o = skyPick === 16 ? EX_SKY : SKY + skyPick * REC;
       return [
+        section('🔭 Look up', 'Your town’s night sky'), skyDome(s, skyPick),
         section('Constellations', `${range(16).filter(k => (used >> k) & 1).length} of 16 slots used`),
         card(row('Constellation', null, selectInput(opts, () => skyPick, v => { skyPick = v; refresh(); }, { width: 'w-l' })),
           skyPick < 16 ? row('Slot in use', 'Off frees the slot (ConstellationRecords used mask).', switchInput(() => (s.u16(SKY + 0x460) >> skyPick) & 1, v => { s.set16(SKY + 0x460, (s.u16(SKY + 0x460) & ~(1 << skyPick)) | (v ? 1 << skyPick : 0)); refresh(); }), SKY + 0x460) : null,

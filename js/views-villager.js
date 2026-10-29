@@ -46,6 +46,7 @@
   }
   window.VillagerPlanEditor = planEditor;
 
+  const show3d = {};   // per neighbor: their room shown in 3D
   for (let v = 0; v < 8; v++) {
     VIEWS.push({
       id: 'villager' + v, group: 'Neighbors',
@@ -119,9 +120,22 @@
             },
           });
           const x = s.u8(b + 0x6E8), y = s.u8(b + 0x6E9);
+          // In 3D: the same arrangement with the game's own furniture models, wallpaper and flooring (js/room3d.js).
+          // The layout grid puts the room at x 5–10, y 8–13.
+          let room = view;
+          if (layout && show3d[v] && window.Room3D) {
+            const sc = Room3D.scene({ area: { x: 5, y: 8, w: 6, h: 6 }, wall: wallId, floor: floorId, items: (gx, gy, L) => {
+              if (L || gx < 5 || gx > 10 || gy < 8 || gy > 13) return 0xFFF1;
+              const k = at[(gy - 8) * 6 + (gx - 5)]; if (k === undefined) return 0xFFF1;
+              const id = s.u16(b + 0x6AC + k * 2); return id === 0xFFF1 ? id : (id & ~3) | (facing[k] || 0);
+            } });
+            const cv = sc && Model3D.viewer(sc.groups, { size: Math.min(560, Math.max(300, (document.getElementById('content')?.clientWidth || 640) - 90)), yaw: 0, spin: false, pitch: 0.75, zoom: 1.35 });
+            room = cv ? h('div', { class: 'room3d' }, cv, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, 'Drag to look around. Switch 3D off to swap furniture.')) : view;
+          }
+          const toggle3d = layout ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, '3D view', UI.switchInput(() => !!show3d[v], q => { show3d[v] = q; refresh(); })) : null;
           return [
-            section('Inside', 'Click a piece to swap it · right-click to remove'),
-            h('div', { class: 'card pad' }, view, h('div', { class: 'muted', style: { fontSize: '12px', textAlign: 'center', marginTop: '6px' } }, layout ? `Room layout ${s.u8(b + 0x6F2)} from your ROM, with the pieces they have on display.` : 'The game arranges these 10 pieces itself. Open your ROM to see its real arrangement.')),
+            section('Inside', show3d[v] && layout ? 'Their room in 3D, with the game’s own furniture' : 'Click a piece to swap it · right-click to remove'),
+            h('div', { class: 'card pad' }, toggle3d ? h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' } }, toggle3d) : null, room, h('div', { class: 'muted', style: { fontSize: '12px', textAlign: 'center', marginTop: '6px' } }, layout ? `Room layout ${s.u8(b + 0x6F2)} from your ROM, with the pieces they have on display.` : 'The game arranges these 10 pieces itself. Open your ROM to see its real arrangement.')),
             card(
               row('Wallpaper', null, selectInput(walls.map((w, i) => [i, w[1]]), () => s.u8(b + 0x6EE), q => { s.set8(b + 0x6EE, q); refresh(); }), b + 0x6EE),
               row('Flooring', null, selectInput(floors.map((w, i) => [i, w[1]]), () => s.u8(b + 0x6EF), q => { s.set8(b + 0x6EF, q); refresh(); }), b + 0x6EF),
