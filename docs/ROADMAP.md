@@ -16,13 +16,14 @@ Worked through in chunks, highest impact first. Each chunk ships as its own rele
 - [ ] Leaflet Link 1.3 on a real 3DS (needs the person's console).
 
 **Chunk 2: completionists**
-- [ ] Happy Room Academy calculator: each room scored the way the game does, with "add X for Y points".
-- [ ] Turnip advisor: the likely pattern from this week's prices, sell or wait.
-- [ ] One "100% town" score: museum, catalog, encyclopedia, songs, golden tools, perfect town, HRA.
-- [ ] Gyroid collection, with their sounds.
-- [ ] Emotion and hairstyle checklists.
-- [ ] K.K. jukebox: playlists, shuffle, missing songs.
-- [ ] Move-out predictor and the neighbor relationship web.
+- [x] Happy Room Academy calculator: each room scored from the confirmed rules, with what would raise it. Feng Shui is still to research, so it shows as an estimate.
+- [x] Turnip advisor: the game rolls the week's prices in advance, so it says exactly whether to sell now or wait.
+- [x] One "100% town" score at the top of Completion.
+- [~] Gyroid collection: counted on Completion and in the catalog. Their sounds need the gyroid sound IDs, still to research.
+- [-] Emotion and hairstyle checklists: dropped. The game keeps only each resident's current four emotions and current style, so there's nothing to tick off.
+- [x] K.K. jukebox: learned and missing songs, play all, shuffle, stereo or live.
+- [x] Neighbor relationship web on Friendships.
+- [ ] Move-out predictor: needs the game's move-out rules from the decompilation first.
 
 **Chunk 3: fans**
 - [ ] Villager trading: export a neighbor and move them into another save.

@@ -87,6 +87,23 @@
     return h('div', { html: svg });
   }
 
+  // The turnip advisor: the game rolls the whole week's prices in advance, so from the town's own date and time it can
+  // say exactly whether to sell now or wait. Prices change at noon; Sunday is Joan's.
+  const price = (s, i) => s.u8(PRICES + i) || (s.u8(PATTERN) === 1 && i > 1 ? s.u16(SPIKE) : 0);
+  function advice(s) {
+    const CAL = window.WW_CALENDAR; if (!CAL || s.u8(PATTERN) === 255) return null;
+    const [d, m, y] = s.bytes(TURNIP, 3); if (!m) return null;
+    const now = CAL.gameNow(s), start = new Date(2000 + y, m - 1, d), days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - start) / 86400000);
+    if (days < 0 || days > 6) return ['🗓️', 'These prices are for another week. The game rolls new ones when Joan comes on Sunday.'];
+    const joan = s.u8(PRICES), slot = now.getDay() * 2 + (now.getHours() >= 12 ? 1 : 0);
+    const when = i => `${DAYS[i >> 1]} ${i & 1 ? 'afternoon' : 'morning'}`;
+    let bi = -1; for (let i = Math.max(2, slot + 1); i < 14; i++) if (bi < 0 || price(s, i) > price(s, bi)) bi = i;
+    if (slot < 2) return bi < 0 ? null : ['🥬', `Joan sells at ${joan} today. This week's best price comes ${when(bi)}: ${fmt(price(s, bi))} bells, ${price(s, bi) > joan ? `${fmt(price(s, bi) - joan)} more than you pay` : 'less than you pay, so buying this week loses bells'}.`];
+    const nowP = price(s, slot);
+    if (bi < 0 || nowP >= price(s, bi)) return ['💰', `Sell now: ${fmt(nowP)} bells is the best price left this week${joan ? ` (Joan sold at ${joan})` : ''}. Turnips spoil when next Sunday comes.`];
+    return ['⏳', `Wait: Nook's buys at ${fmt(nowP)} now, but ${fmt(price(s, bi))} on ${when(bi)}, ${fmt(price(s, bi) - nowP)} more per turnip. They spoil when next Sunday comes.`];
+  }
+
   // One weather pattern as a 24-hour strip, 6 AM to 6 AM.
   function wxStrip(p) {
     const hours = (D.weather[p] || '').split('').map(Number);
@@ -122,6 +139,7 @@
       return [
         // ---------------- turnips
         section('🥬 Turnip market', best.v > 0 ? `Best sell: ${fmt(best.v)} bells on ${DAYS[best.i >> 1]} ${best.i & 1 ? 'afternoon' : 'morning'}` : 'No prices yet'),
+        (() => { const a = advice(s); return a ? h('div', { class: 'callout' }, h('span', { class: 'em' }, a[0]), h('div', null, h('b', null, 'Turnip advisor: '), a[1], a[0] === '🗓️' ? null : h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '2px' } }, 'From the prices the game has already rolled for this week, at your town’s own time.'))) : null; })(),
         h('div', { class: 'card pad' }, chart(s), h('div', { class: 'muted', style: { fontSize: '12px', textAlign: 'center' } }, 'Yellow: Joan’s Sunday price · green above it, red below')),
         h('div', { class: 'card pad' }, priceGrid),
         card(

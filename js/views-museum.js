@@ -299,9 +299,20 @@
               h('div', null, h('b', null, nm), h('div', { class: 'ex-meta' }, got ? (where.length ? `Found in ${where.join(', ')}` : 'The game says you received it') : how)));
           })));
       });
+      // One number for the whole town: every goal below counts the same, and each resident's goals are averaged.
+      const parts = [c.total / c.max, songs / 70, house / 6, pt / 16];
+      for (const p of ps) {
+        const b = s.playerBase(p), mine = [];
+        mine.push(D.critters.bugs.filter((_, i) => caught(s, p, 'bugs', i)).length / 56, D.critters.fish.filter((_, i) => caught(s, p, 'fish', i)).length / 56);
+        if (window.WW_CATALOG) { const C = WW_CATALOG; for (const k of [l => l.kind !== 'Pics' && l.kind !== 'Gyroids', l => l.kind === 'Gyroids', l => l.kind === 'Pics']) { const l = C.ENTRIES.filter(k); mine.push(l.filter(e => C.has(s, p, e)).length / l.length); } }
+        mine.push(GOLDEN.filter(([, id, , flag]) => (flag !== null && s.bit(b + 0x21FC, flag)) || townHas(s, id).length).length / GOLDEN.length);
+        parts.push(mine.reduce((x, y) => x + y, 0) / mine.length);
+      }
+      const overall = Math.floor(parts.reduce((x, y) => x + Math.min(1, y), 0) / parts.length * 1000) / 10;
       return [
         h('div', { class: 'museum-hero', style: { background: 'linear-gradient(135deg,#ffe7a0,#f6c25a)' } }, h('div', { class: 'owl' }, '🏆'),
-          h('div', { style: { flex: 1 } }, h('div', { class: 'mh-title' }, 'Town completion'), h('div', { class: 'mh-sub' }, 'Museum, music, home and more. Click any card to jump there.'))),
+          h('div', { style: { flex: 1 } }, h('div', { class: 'mh-title' }, 'Town completion'), h('div', { class: 'mh-sub' }, 'Museum, music, home and more. Click any card to jump there.')),
+          h('div', { class: 'mh-score', title: 'Every goal on this page counts the same; each resident’s encyclopedia, catalog, gyroids, pics and golden tools are averaged.' }, h('b', null, `${overall}%`), h('span', null, overall >= 100 ? 'A perfect town!' : 'complete'))),
         section('Town'),
         h('div', { class: 'goal-grid' },
           tile('🏛️', 'Museum', c.total, c.max, 'museum', s.bit(0x15FD8, 3) ? 'Blathers already sent you the Museum Model!' : 'Blathers sends a Museum Model when it’s full.'),

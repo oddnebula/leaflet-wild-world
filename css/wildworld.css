@@ -620,3 +620,23 @@ canvas.model3d:active { cursor: grabbing; }
 .sync-diff-list li { display: flex; gap: 8px; } .sync-diff-list li span { width: 20px; text-align: center; flex: none; }
 .sync-clock { margin-top: 12px; padding: 10px 14px; border-radius: 12px; background: #f3f0ff; border: 2px solid #d6cdf5; font-size: 13px; line-height: 1.45; }
 .sync-clock .sync-row { gap: 8px; }
+
+/* Completion score, Happy Room Academy and the K.K. jukebox */
+.mh-score { display: flex; flex-direction: column; align-items: center; padding: 6px 16px; border-radius: 16px; background: rgba(255,255,255,.55); }
+.mh-score b { font-size: 30px; line-height: 1.1; color: var(--ww-ink); }
+.mh-score span { font-size: 12px; font-weight: 800; color: var(--ww-ink-2); }
+.hra-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hra-total b { font-size: 30px; color: var(--ww-ink); }
+.hra-line { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--sep); }
+.hra-line.ok { color: #2f6b2f; font-weight: 700; }
+.hra-idea { padding: 8px 0; border-bottom: 1px dashed var(--sep); }
+.hra-gain { margin-left: 8px; font-weight: 800; color: var(--leaf-deep); }
+.hra-missing { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.hra-it { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px 2px 4px; border-radius: 999px; background: var(--field); border: 1px solid var(--sep); }
+.jb-list { padding: 4px 0; }
+.jb-row { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-bottom: 1px dashed var(--sep); }
+.jb-row:last-child { border-bottom: 0; }
+.jb-row.on { background: var(--leaf-soft); }
+.jb-row:not(.got) b { color: var(--text-2); }
+.jb-n { width: 22px; text-align: center; }
+.jb-now { display: flex; align-items: center; gap: 8px; }

@@ -256,7 +256,30 @@
           return h('td', null, inp);
         })))));
       const req = s.u16(TUNE_REQ), requested = (req >> 1) & 1, requester = (req >> 2) & 7;
+      // The same scores as a web: neighbors round a circle, green lines for friends, red for ones who don't get on.
+      const web = (() => {
+        if (who.length < 2) return null;
+        const W = 420, cx = W / 2, cy = 190, rad = 140, pos = {};
+        who.forEach((v, k) => { const a = -Math.PI / 2 + k * 2 * Math.PI / who.length; pos[v] = [cx + rad * Math.cos(a), cy + rad * Math.sin(a)]; });
+        const lines = [], pairs = [];
+        for (let i = 0; i < who.length; i++) for (let j = i + 1; j < who.length; j++) {
+          const a = who[i], b = who[j], v = s.u8(REL + pairIndex(a, b)) << 24 >> 24;
+          pairs.push([v, a, b]);
+          if (Math.abs(v) < 10) continue;
+          const [x1, y1] = pos[a], [x2, y2] = pos[b];
+          lines.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${v > 0 ? '#3a9a3e' : '#d0503f'}" stroke-opacity="${(0.25 + Math.min(1, Math.abs(v) / 128) * 0.75).toFixed(2)}" stroke-width="${(1 + Math.abs(v) / 18).toFixed(1)}" stroke-linecap="round"><title>${names[a]} & ${names[b]}: ${v}</title></line>`);
+        }
+        const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const dots = who.map(v => { const [x, y] = pos[v]; return `<circle cx="${x}" cy="${y}" r="9" fill="#fff9e8" stroke="#c9a463" stroke-width="3"/><text x="${x}" y="${y + (y < cy ? -16 : 26)}" text-anchor="middle" font-size="13" font-weight="800" fill="#5a3b1c">${esc(names[v])}</text>`; }).join('');
+        pairs.sort((x, y) => y[0] - x[0]);
+        const best = pairs[0], worst = pairs[pairs.length - 1];
+        return h('div', { class: 'card pad rel-web' },
+          h('div', { html: `<svg viewBox="0 0 ${W} 380" width="100%" role="img" aria-label="Neighbor friendships">${lines.join('')}${dots}</svg>` }),
+          h('div', { class: 'muted', style: { textAlign: 'center', fontSize: '12.5px' } },
+            best && best[0] > 0 ? `Closest: ${names[best[1]]} and ${names[best[2]]} (${best[0]}). ` : '', worst && worst[0] < 0 ? `Least friendly: ${names[worst[1]]} and ${names[worst[2]]} (${worst[0]}). ` : '', 'Thicker lines are stronger feelings; pairs near 0 aren’t drawn.'));
+      })();
       return [
+        section('Friendship web', 'Who gets on with whom'), web,
         section('Friendship chart', `${who.length} neighbors · ${who.length * (who.length - 1) / 2} pairs`),
         h('div', { class: 'card pad', style: { overflowX: 'auto' } }, who.length > 1 ? grid : h('div', { class: 'empty-note' }, 'You need at least two neighbors.')),
         card(
