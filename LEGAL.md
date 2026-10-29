@@ -40,10 +40,32 @@ If you choose to open a ROM:
   save editors publish. Sources and licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - **Your own saves only.** Leaflet is meant for editing saves of games you own, for personal use.
 
+## Leaflet Link (Cartridge Sync)
+
+Leaflet Link is an optional 3DS app that lets Leaflet read and write the **save** on your Wild World game card over
+your own Wi-Fi network.
+
+- It only touches the save chip of a game card you put in the console. It doesn't read, copy, dump or change the game
+  itself, and it can't be used to copy games.
+- It contains no Nintendo code, logos or content. It's built with the open-source libctru, citro2d and citro3d
+  libraries (zlib license).
+- It runs as homebrew, so it needs a console set up to run homebrew. Setting that up modifies your console, may void
+  its warranty, and its legal status depends on where you live. **That choice, and following your local law, are
+  yours.** Leaflet Link itself doesn't bypass or disable any protection, and this project doesn't explain how to set
+  up homebrew or link to tools that do.
+- It talks only to Leaflet on your local network. Nothing is sent to the internet.
+- **Play on melonDS** uses a ROM backup that you choose, which must be one you made from your own game card. Leaflet
+  keeps a copy of it only in its own play folder on your Mac (`~/Library/Application Support/Leaflet/Play`, which
+  isn't synced to iCloud) so the emulator can keep its save next to it. Leaflet never uploads, shares or
+  downloads ROMs, and Leaflet Link can't read or copy the game from a game card.
+- Keeping a friend code on an emulator copies your town's own Nintendo WFC ID (from your save) into your emulator's
+  settings. Nintendo Wi-Fi Connection closed in 2014; replacement services such as Wiimmfi are run by others, have
+  their own rules, and aren't connected to this project.
+
 ## No warranty
 
 Leaflet is provided "as is" under the [MIT License](LICENSE), without warranty of any kind. Always keep a backup
-of your save before you play an edited file.
+of your save before you play an edited file, and before sending a save to a game card for the first time.
 
 ## Rights holders
 

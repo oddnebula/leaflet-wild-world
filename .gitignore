@@ -7,3 +7,9 @@
 # Build output
 dist/
 .DS_Store
+link/build/
+link/*.3dsx
+link/*.smdh
+link/*.elf
+link/host/leaflet-link-sim
+link/host/sim-sd/

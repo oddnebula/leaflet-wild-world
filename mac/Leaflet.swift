@@ -13,8 +13,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var watchedURL: URL?
     var watchedMod: Date?
     var watchTimer: Timer?
+    // Cartridge Sync's "Play on melonDS" (EmulatorSession.swift).
+    let emu = EmulatorSession()
+    let melonInstaller = MelonInstaller()
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        emu.report = { [weak self] info in self?.sendEmu(info) }
+        melonInstaller.report = { [weak self] info in
+            guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+            DispatchQueue.main.async { self?.web.evaluateJavaScript("window.LeafletMelonInstall && LeafletMelonInstall(\(s))") }
+        }
         buildMenu()
 
         let config = WKWebViewConfiguration()
@@ -119,8 +127,114 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "save":
             guard let b64 = body["data"] as? String, let data = Data(base64Encoded: b64) else { return }
             savePanel(data: data, name: body["name"] as? String ?? "Animal Crossing - Wild World.sav")
+        case "emuStatus": sendEmu(emu.status().merging(["state": "status"]) { a, _ in a })
+        case "emuChooseRom": emu.chooseROM(in: window) { err in self.sendEmu(self.emu.status().merging(["state": err == nil ? "status" : "error", "error": err ?? ""]) { a, _ in a }) }
+        case "emuChooseEmulator": emu.chooseEmulator(in: window) { err in self.sendEmu(self.emu.status().merging(["state": err == nil ? "status" : "error", "error": err ?? ""]) { a, _ in a }) }
+        case "emuPlay":
+            guard let b64 = body["data"] as? String, let save = Data(base64Encoded: b64) else { return }
+            let start = (body["start"] as? String).flatMap { Data(base64Encoded: $0) } ?? save
+            do { try emu.play(save: save, start: start, cardCode: body["cardCode"] as? String ?? "", town: body["town"] as? String ?? "Town") }
+            catch { sendEmu(["state": "error", "error": "\(error)"]) }
+        case "findSaves": findSaves(in: removableVolumes())
+        case "findSavesIn":
+            let panel = NSOpenPanel()
+            panel.message = "Choose an SD card or folder to search for Wild World saves"
+            panel.canChooseDirectories = true; panel.canChooseFiles = false
+            panel.beginSheetModal(for: window) { resp in if resp == .OK, let u = panel.url { self.findSaves(in: [u]) } }
+        case "melonInstall":
+            melonInstaller.install { url in
+                if let url = url { UserDefaults.standard.set(url.path, forKey: "leaflet.emulator") }
+                self.sendEmu(self.emu.status().merging(["state": "status"]) { a, _ in a })
+            }
+        case "openSecuritySettings":
+            if let u = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension") { NSWorkspace.shared.open(u) }
+        case "emuResume":
+            do { try emu.resume() } catch { sendEmu(["state": "error", "error": "\(error)"]) }
+        case "emuClose":
+            emu.close()
+            sendEmu(emu.status().merging(["state": "status"]) { a, _ in a })
+        case "melonWfcRead": melonWfc(write: nil)
+        case "melonWfcWrite":
+            guard let b64 = body["data"] as? String, let data = Data(base64Encoded: b64) else { return }
+            melonWfc(write: data)
+        case "install3ds":
+            guard let b64 = body["data"] as? String, let app = Data(base64Encoded: b64) else { return }
+            installOn3DS(app, address: (body["address"] as? String ?? "").trimmingCharacters(in: .whitespaces))
         default: break
         }
+    }
+
+    // Cartridge Sync: sends Leaflet Link to a Homebrew Launcher that's waiting with Y pressed (see LinkInstaller.swift).
+    // Progress goes back to the page as LeafletLinkInstall({state, progress, address, error}).
+    func installOn3DS(_ app: Data, address: String) {
+        func report(_ info: [String: Any]) {
+            guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+            DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletLinkInstall && LeafletLinkInstall(\(s))") }
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var target = address
+            if target.isEmpty {
+                report(["state": "searching"])
+                guard let found = LinkInstaller.discover(seconds: 10) else { report(["state": "notFound"]); return }
+                target = found
+            }
+            report(["state": "sending", "progress": 0, "address": target])
+            do {
+                var last = -1
+                try LinkInstaller.send(app, name: "LeafletLink.3dsx", to: target) { p in
+                    let pct = Int(p * 100)
+                    if pct != last { last = pct; report(["state": "sending", "progress": p, "address": target]) }
+                }
+                report(["state": "done", "address": target])
+            } catch {
+                report(["state": "error", "error": "\(error)", "address": target])
+            }
+        }
+    }
+
+    // Cartridge Sync: Wild World saves on SD cards (SaveFinder.swift). Replies go to LeafletSaves({results, searched}).
+    func findSaves(in roots: [URL]) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let info: [String: Any] = ["results": SaveFinder.find(in: roots), "searched": roots.map { $0.lastPathComponent }]
+            guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+            DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletSaves && LeafletSaves(\(s))") }
+        }
+    }
+    func removableVolumes() -> [URL] { SaveFinder.removableVolumes() }
+
+    func sendEmu(_ info: [String: Any]) {
+        guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.LeafletEmu && LeafletEmu(\(s))")
+    }
+
+    // Cartridge Sync: melonDS's Wi-Fi settings on this Mac (its built-in firmware keeps them in wfcsettings.bin), so a
+    // town's Nintendo WFC user ID can be set there. Writes keep the old file next to it and are read back. Replies go
+    // to LeafletMelonWfc({exists, data, path, running, ok, backup, error}).
+    func melonWfc(write data: Data?) {
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences/melonDS")
+        let file = dir.appendingPathComponent("wfcsettings.bin")
+        let running = NSWorkspace.shared.runningApplications.contains { ($0.localizedName ?? "").lowercased().hasPrefix("melonds") || ($0.bundleIdentifier ?? "").lowercased().contains("melonds") }
+        var info: [String: Any] = ["path": file.path, "running": running, "installed": FileManager.default.fileExists(atPath: dir.path)]
+        if let data = data {
+            if running { info["error"] = "melonDS is open. Quit it first, so it doesn’t write over the new settings." }
+            else {
+                do {
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    if FileManager.default.fileExists(atPath: file.path) {
+                        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH.mm.ss"
+                        let backup = dir.appendingPathComponent("wfcsettings before Leaflet \(f.string(from: Date())).bin")
+                        try FileManager.default.copyItem(at: file, to: backup)
+                        info["backup"] = backup.lastPathComponent
+                    }
+                    try data.write(to: file, options: .atomic)
+                    info["ok"] = (try? Data(contentsOf: file)) == data
+                    if info["ok"] as? Bool != true { info["error"] = "The file didn’t read back the same." }
+                } catch { info["error"] = error.localizedDescription }
+            }
+        }
+        if let now = try? Data(contentsOf: file) { info["exists"] = true; info["data"] = now.base64EncodedString() } else { info["exists"] = false }
+        guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.LeafletMelonWfc && LeafletMelonWfc(\(s))")
     }
 
     @objc func openPanel() {
@@ -210,6 +324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
+
+    // Links that open a new window (target="_blank") go to the default browser.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url, url.scheme == "https" || url.scheme == "http" { NSWorkspace.shared.open(url) }
+        return nil
+    }
 
     // MARK: menus
 

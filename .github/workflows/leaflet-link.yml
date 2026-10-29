@@ -1,0 +1,32 @@
+# Builds Leaflet Link (the 3DS app for Cartridge Sync) with devkitPro's official image, and runs its end-to-end
+# tests against a simulated game card.
+name: Leaflet Link
+on:
+  push:
+    paths: ['link/**', '.github/workflows/leaflet-link.yml']
+  pull_request:
+    paths: ['link/**']
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the simulator
+        run: make -C link sim
+      - name: Write engine, protocol and fault tests
+        run: python3 link/tests/test_link.py link/host/leaflet-link-sim
+
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build LeafletLink.3dsx
+        run: make -C link
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LeafletLink
+          path: link/LeafletLink.3dsx
+          if-no-files-found: error

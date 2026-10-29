@@ -23,12 +23,16 @@ No other Wild World editor we know of has these:
 - 📖 **A catalog with the game's real prices**, series, colors and Happy Room Academy points, plus a set tracker.
 - 🩺 **Save Doctor**, which finds and fixes the broken states old editors and cheat codes leave behind.
 - 🪪 **A shareable town card**: one image with your map, fruit, tune, flag, residents and neighbors.
+- 🎮 **Cartridge Sync** with your real game card over Wi-Fi, through Leaflet Link on a 3DS that runs homebrew. Edit
+  your real town, or play it on an emulator with sharper graphics and send it back, **keeping your friend code**. Every write is checked byte for
+  byte, and the old save is kept first. *New: try it with a backed-up save first.*
 - ✨ **Editors for things nobody else touches**: Celeste's constellations, the bulletin board, the post office,
   furniture switches and gyroid beats, Mom's letters, villager hobbies, and every one of the game's event flags.
 
 <sub>Compared with the open-source Wild World editors we know of (ACSE, LeafEdit, WildEdit, WildStorage and
 ACWW-Web-SaveEditor) as of October 2026. The 3D models, music and real prices need a ROM backup of your own
-cartridge. Everything else works with just a save file.</sub>
+cartridge. Cartridge Sync needs Leaflet Link on a 3DS that runs homebrew. Everything else works with just a save
+file.</sub>
 
 Works with USA and European saves (256 KB `.sav` files from flashcarts, DeSmuME, melonDS and save dumpers).
 Japanese and Korean saves use a different layout and are not supported.
@@ -85,6 +89,57 @@ What it adds:
 - the game's own **sound effects** for every click, tab, popup, confirm and error, and Animalese from the game's voice samples
 
 The extracted files stay on your computer (in the browser storage of Leaflet's window, which the Mac app keeps between launches) and are never uploaded. Without a ROM, Leaflet still edits everything and falls back to its own emoji, drawings and synth sounds. *Forget game art* on the Welcome screen removes the cached files. When a new version of Leaflet reads more from the ROM than your cached copy holds, the Welcome screen asks you to open the ROM once more.
+
+## Cartridge Sync: your real game card
+
+With **Leaflet Link**, a small 3DS app, Leaflet can read and write the save on your *Wild World* game card over
+Wi-Fi. Edit your real town, or take it to an emulator with sharper graphics and bring it back to the card when you're
+done.
+
+| | |
+|---|---|
+| ![Cartridge Sync connected to a game card](docs/screenshots/sync.png) **Connected:** the town on your game card, ready to open, play on melonDS or send back | ![Reviewing a send](docs/screenshots/sync-review.png) **Before sending:** what changes, and the town's clock kept in step |
+
+<sub>Shown connected to the Leaflet Link simulator (`link/host`) with the demo town; the friend codes are made up.</sub>
+
+1. **Install Leaflet Link over Wi-Fi.** You need a 3DS that can run homebrew. Open the Homebrew Launcher and press
+   **Y**, then click **Send to my 3DS** in Leaflet's **Cartridge Sync** page (Mac), or double-click
+   **Install Leaflet Link** in the Leaflet folder (Windows). You can also copy `LeafletLink.3dsx` to the SD card's
+   `3ds` folder yourself. Later updates go over Wi-Fi too.
+2. Put the game card in and open Leaflet Link. Leaflet connects to it.
+3. Choose **Open in Leaflet**, **Save for an emulator** or **Send to the game card**.
+
+Sending is guarded at every step:
+- **Before sending:** Leaflet shows exactly what will change and won't replace a different town unless you say so.
+- **On the 3DS:** Leaflet Link checks the save's CRC and every game checksum, waits for you to press **A**, and keeps
+  the card's current save on the SD card.
+- **Writing:** it writes only the pages that changed, then reads the whole card back. If anything doesn't match, it
+  puts the original back.
+- **Afterwards:** Leaflet reads the card again over Wi-Fi to confirm.
+
+**Play on melonDS with one click (Mac app).** No melonDS yet? **Install melonDS** downloads the latest release from
+melonDS's official GitHub page, checks it against the SHA-256 GitHub publishes and checks its code signature, then
+puts it in your Applications folder. melonDS isn't notarized by Apple, so the first time it opens macOS asks you to
+allow it (Privacy & Security › Open Anyway), and Leaflet shows you where. Leaflet reads the town from your game card and starts melonDS with it,
+using a ROM backup you made from that same card. It keeps every save melonDS writes in Backups. When you quit
+melonDS, it shows what changed and offers to send the town back, through the same checks as any other send. If the
+game card was played on the 3DS in the meantime, Leaflet warns you before anything is replaced.
+
+**Your town's clock comes along too.** Wild World's time is the system clock plus an offset kept in the save, so
+moving a town to a system whose clock reads differently looks like time travel, and turnips spoil. Leaflet Link
+reports the 3DS's clock, and whenever a town moves between the game card and an emulator, Leaflet shifts the save's
+offset by the difference. The game's date and time carry on exactly, and turnips only spoil when the week really ends.
+
+**Saves on SD cards.** Put your R4 (or other flashcart) microSD card in your computer and Cartridge Sync finds every
+Wild World save on it, so you can open it, back it up or put it on your game card.
+
+**Your friend code comes along.** Wild World keeps a friend code only on a system whose Nintendo WFC ID matches the
+one in the save. So Leaflet reads the ID from the save itself and gives it to melonDS: one click on a Mac, or a
+ready-made `wfcsettings.bin` (or your own firmware dump, updated). The same friend code and friends then work on the
+emulator and on your DS. Each resident's friend code, and their friends', also show on their page.
+
+How it works, how to build it, and its fault tests are in [link/README.md](link/README.md). Leaflet Link is new:
+try it first with a game card whose save you've backed up.
 
 ## Is it safe?
 

@@ -180,9 +180,14 @@
   function friends(s, b, refresh) {
     const F = b + 0x1E60, used = k => s.bytes(F + k * 0x1C, 0xC).some(x => x);
     const list = [...Array(32).keys()].filter(used);
+    const me = window.WW_WFC ? WW_WFC.fromUserData(s.m, b) : null;
+    const gc = me && me.ok && me.gamecode ? [...me.gamecode].reverse().map(c => c.charCodeAt(0)) : null;
+    const theirCode = k => { const c = window.WW_WFC ? WW_WFC.friendCode(s.m, F + k * 0x1C, gc) : ''; return c ? ` · ${c}` : ''; };
     return [
       section('Wi-Fi friends', `${list.length} of 32 · checksum kept valid`),
-      card(...(list.length ? list.map(k => row(`Friend ${k + 1}`, `${s.str(F + k * 0x1C + 0xC, 8) || '?'} from ${s.str(F + k * 0x1C + 0x14, 8) || '?'}`,
+      card(row('Friend code', me && me.friendCode ? 'This resident’s Nintendo WFC friend code. Cartridge Sync can keep it when you play on an emulator.' : 'Made the first time this resident connects to Nintendo WFC (today through a service such as Wiimmfi).',
+        me && me.friendCode ? h('span', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('b', { style: { fontSize: '16px', letterSpacing: '.5px' } }, me.friendCode), h('button', { class: 'btn small', onclick: () => APP.go('sync') }, 'Keep it on an emulator')) : h('span', { class: 'muted' }, 'None yet'), b + 0x1E10)),
+      card(...(list.length ? list.map(k => row(`Friend ${k + 1}`, `${s.str(F + k * 0x1C + 0xC, 8) || '?'} from ${s.str(F + k * 0x1C + 0x14, 8) || '?'}${theirCode(k)}`,
         h('span', { style: { display: 'flex', gap: '6px' } }, textInput(() => s.str(F + k * 0x1C + 0xC, 8), v => s.setStr(F + k * 0x1C + 0xC, 8, v), 8, { width: 'w-s', check: WWSave.canEncode }), textInput(() => s.str(F + k * 0x1C + 0x14, 8), v => s.setStr(F + k * 0x1C + 0x14, 8, v), 8, { width: 'w-s', check: WWSave.canEncode })), F + k * 0x1C))
         : [row('No friends registered', 'Friend codes added at the gate show up here.', h('span', { class: 'muted' }, '📡'))]),
         list.length ? row('Forget every friend', 'Clears the roster. Friend codes would need to be exchanged again.', h('button', { class: 'btn small danger', onclick: () => { for (let i = 0; i < 0x380; i++) s.set8(F + i, 0); sfx.pop(); toast('Friend roster cleared', '📡'); refresh(); } }, 'Clear'), F, { risk: 'med', why: 'This can’t be undone in-game.' }) : null),

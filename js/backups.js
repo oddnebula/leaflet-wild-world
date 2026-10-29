@@ -8,7 +8,7 @@
   const VIEWS = (window.VIEWS = window.VIEWS || []);
   const DB = 'leaflet-backups', STORE = 'snaps';
   const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.leaflet;
-  const KINDS = { opened: ['📂', 'Opened in Leaflet'], saved: ['💾', 'Saved by Leaflet'], game: ['🎮', 'Saved by the game'], draft: ['📝', 'Unsaved edits'], manual: ['📌', 'Backed up by hand'] };
+  const KINDS = { opened: ['📂', 'Opened in Leaflet'], saved: ['💾', 'Saved by Leaflet'], game: ['🎮', 'Saved by the game'], draft: ['📝', 'Unsaved edits'], manual: ['📌', 'Backed up by hand'], cartridge: ['🎮', 'Read from the game card'], sent: ['📤', 'Sent to the game card'] };
 
   // ---------- settings (per computer) ----------
   const SETTINGS_KEY = 'leaflet-backup-settings';

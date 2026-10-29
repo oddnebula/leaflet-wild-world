@@ -11,10 +11,12 @@ OUT="$TMP/Leaflet.app"
 mkdir -p "$ROOT/dist"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/web"
 
-# Universal binary (arm64 + x86_64), macOS 13+.
+# Universal binary (arm64 + x86_64), macOS 13+. Leaflet.swift has the app's top-level code, so it's compiled as
+# main.swift alongside the other sources.
+cp mac/Leaflet.swift "$TMP/main.swift"
 for arch in arm64 x86_64; do
   swiftc -O -target "$arch-apple-macos13.0" -framework AppKit -framework WebKit \
-    -o "$TMP/Leaflet-$arch" mac/Leaflet.swift
+    -o "$TMP/Leaflet-$arch" "$TMP/main.swift" mac/LinkInstaller.swift mac/EmulatorSession.swift mac/MelonInstaller.swift mac/SaveFinder.swift
 done
 lipo -create "$TMP/Leaflet-arm64" "$TMP/Leaflet-x86_64" -output "$OUT/Contents/MacOS/Leaflet"
 
@@ -48,6 +50,12 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>Not affiliated with Nintendo.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Cartridge Sync talks to Leaflet Link on your 3DS over your Wi-Fi network.</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key><true/>
+    <key>NSAllowsArbitraryLoadsInWebContent</key><true/>
+  </dict>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

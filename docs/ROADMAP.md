@@ -57,6 +57,12 @@ A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon
 
 ## Sharing and multiplayer
 - ✅ **Town card (S).** A shareable image of the town: map, fruit, tune, residents, neighbors, flag, house.
+- ✅ **Cartridge Sync (L).** Leaflet Link, a 3DS homebrew app, reads and writes the game card's save over Wi-Fi,
+  with backups, CRC and checksum checks, confirmation on the console, read-back verification and automatic restore
+  (link/). Next: test on real hardware with several cartridges (different flash chips), and add discovery so the
+  address doesn't have to be typed.
+- ✅ **Wireless install and updates of Leaflet Link, friend codes kept on emulators, and Play on melonDS** with
+  sessions that survive restarts and send the town back to the card.
 - **Villager trading (M).** Export a neighbor (the 0x700-byte record) as a file and import into another save,
   the way the game moves villagers between towns.
 - **Item gifting between saves (S).** Copy items or patterns from one save to another with drag and drop.
