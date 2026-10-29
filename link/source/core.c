@@ -497,7 +497,7 @@ static void sd_consider(const char *rel, bool backup, int64_t size) {
   if (!region) return;
   LLSaveFile *e = &sdList[sdN++];
   memset(e, 0, sizeof *e);
-  snprintf(e->path, sizeof e->path, "%s", rel);
+  snprintf(e->path, sizeof e->path, "%.159s", rel);   // paths over 160 characters are skipped before this
   e->size = (uint32_t)size; e->region = (uint8_t)region; e->backup = backup;
   char why[8];
   e->ok = !ll_check_save(filebuf, why, sizeof why);
@@ -509,57 +509,79 @@ static void sd_consider(const char *rel, bool backup, int64_t size) {
 // Folders at the SD card's root that never hold DS saves (or hold far too many files to look through).
 static const char *SKIP[] = { "Nintendo 3DS", "3ds", "DCIM", "luma", "gm9", "private", "Nintendo DSiWare", "cias", "Themes", NULL };
 
-static void sd_walk(char *rel, size_t len, int depth) {
-  char full[300];
-  full_path(full, sizeof full, len ? rel : "/");
-  DIR *d = opendir(full);
-  if (!d) return;
-  struct dirent *de;
-  while ((de = readdir(d)) && sdN < LL_SD_MAX && ++sdVisited < 6000) {
-    const char *n = de->d_name;
-    if (n[0] == '.') continue;
-    size_t l = strlen(n);
-    if (len + 1 + l + 1 > 160) continue;
-    rel[len] = '/'; memcpy(rel + len + 1, n, l + 1);
-    char child[300]; full_path(child, sizeof child, rel);
-    struct stat sb;
-    if (!stat(child, &sb)) {
-      if (S_ISDIR(sb.st_mode)) {
-        bool skip = false;
-        for (int i = 0; !depth && SKIP[i]; i++) if (!strcasecmp(n, SKIP[i])) skip = true;
-        if (!skip && depth < 5) sd_walk(rel, len + 1 + l, depth + 1);
-      } else if (S_ISREG(sb.st_mode) && is_save_name(n)) sd_consider(rel, false, sb.st_size);
-    }
-    rel[len] = 0;
-  }
-  closedir(d);
-}
-
 static int newest_first(const void *a, const void *b) {
   int64_t x = ((const LLSaveFile *)a)->mtime, y = ((const LLSaveFile *)b)->mtime;
   return x < y ? 1 : x > y ? -1 : 0;
 }
 
-int ll_sd_scan(void) {
-  sdN = sdVisited = 0;
+// The search runs a slice at a time (ll_tick), so the screen keeps drawing and Leaflet keeps getting answers while a
+// big SD card is looked through. It walks the backups folder first, then the card itself, with one open folder per
+// level.
+#define SCAN_DEPTH 6
+static struct { bool active; int depth; DIR *dirs[SCAN_DEPTH + 1]; size_t lens[SCAN_DEPTH + 1]; char rel[200]; uint64_t done; } scan;
+
+static bool scan_push(size_t len) {
   char full[300];
-  full_path(full, sizeof full, LL_BACKUP_DIR);
+  full_path(full, sizeof full, len ? scan.rel : "/");
   DIR *d = opendir(full);
-  if (d) {
-    struct dirent *de;
-    while ((de = readdir(d)) && sdN < LL_SD_MAX) {
-      if (de->d_name[0] == '.' || !is_save_name(de->d_name)) continue;
-      char rel[200], child[300];
-      snprintf(rel, sizeof rel, "%s/%.150s", LL_BACKUP_DIR, de->d_name);
-      full_path(child, sizeof child, rel);
-      struct stat sb;
-      if (!stat(child, &sb) && S_ISREG(sb.st_mode)) sd_consider(rel, true, sb.st_size);
+  if (!d) return false;
+  scan.depth++; scan.dirs[scan.depth] = d; scan.lens[scan.depth] = len;
+  return true;
+}
+
+void ll_sd_scan_begin(void) {
+  while (scan.active && scan.depth >= 0) closedir(scan.dirs[scan.depth--]);
+  sdN = sdVisited = 0;
+  memset(&scan, 0, sizeof scan);
+  scan.active = true; scan.depth = -1;
+  // Leaflet Link's own backups (depth 0, marked by the folder) go first; the walk of the card starts when they're done.
+  snprintf(scan.rel, sizeof scan.rel, "%s", LL_BACKUP_DIR);
+  if (!scan_push(strlen(scan.rel))) { scan.rel[0] = 0; scan_push(0); }
+}
+
+bool ll_sd_scanning(void) { return scan.active; }
+
+// Looks through the SD card for up to ms milliseconds. True once the search is finished.
+bool ll_sd_scan_step(uint32_t ms) {
+  if (!scan.active) return true;
+  uint64_t until = plat_ms() + ms;
+  while (plat_ms() < until || !ms) {
+    if (scan.depth < 0 || sdN >= LL_SD_MAX || sdVisited >= 6000) {
+      while (scan.depth >= 0) closedir(scan.dirs[scan.depth--]);
+      // After the backups folder, the card itself.
+      if (scan.lens[0] && !strcmp(scan.rel, LL_BACKUP_DIR) && sdN < LL_SD_MAX && sdVisited < 6000) { scan.rel[0] = 0; memset(scan.lens, 0, sizeof scan.lens); if (scan_push(0)) continue; }
+      scan.active = false; scan.done = plat_ms();
+      qsort(sdList, sdN, sizeof *sdList, newest_first);
+      return true;
     }
-    closedir(d);
+    bool inBackups = !strncmp(scan.rel, LL_BACKUP_DIR, strlen(LL_BACKUP_DIR)) && scan.lens[0];
+    size_t len = scan.lens[scan.depth];
+    struct dirent *de = readdir(scan.dirs[scan.depth]);
+    if (!de) { closedir(scan.dirs[scan.depth--]); if (scan.depth >= 0) scan.rel[scan.lens[scan.depth]] = 0; continue; }
+    sdVisited++;
+    const char *n = de->d_name;
+    size_t l = strlen(n);
+    if (n[0] == '.' || len + 1 + l + 1 > 160) continue;
+    scan.rel[len] = '/'; memcpy(scan.rel + len + 1, n, l + 1);
+    char child[300]; full_path(child, sizeof child, scan.rel);
+    struct stat sb;
+    bool pushed = false;
+    if (!stat(child, &sb)) {
+      if (S_ISDIR(sb.st_mode) && !inBackups) {
+        bool skip = false;
+        for (int i = 0; scan.depth == 0 && SKIP[i]; i++) if (!strcasecmp(n, SKIP[i])) skip = true;
+        if (!skip && scan.depth < 5) pushed = scan_push(len + 1 + l);
+      } else if (S_ISREG(sb.st_mode) && is_save_name(n)) sd_consider(scan.rel, inBackups, sb.st_size);
+    }
+    if (!pushed) scan.rel[len] = 0;
+    if (!ms) continue;
   }
-  char rel[200] = "";
-  sd_walk(rel, 0, 0);
-  qsort(sdList, sdN, sizeof *sdList, newest_first);
+  return false;
+}
+
+int ll_sd_scan(void) {
+  ll_sd_scan_begin();
+  ll_sd_scan_step(0);
   return sdN;
 }
 
@@ -738,6 +760,7 @@ static void step_verify(void) {
 
 void ll_tick(void) {
   refresh_card(false);
+  if (scan.active) ll_sd_scan_step(15);
   switch (st.state) {
     case LL_CONFIRM:
       if (plat_ms() - st.since > 120000) set_state(LL_IDLE, "Ready", "The save wasn't confirmed within two minutes, so it was set aside. Nothing was written.");
@@ -770,7 +793,32 @@ void ll_answer(bool yes) {
 // One connection at a time, every socket non-blocking, so the console's screen keeps drawing while data moves.
 #define REQ_CAP (LL_APP_MAX + 0x2000)
 #define OUT_CAP (LL_SAVE_SIZE + 0x1000)
-static int lsock = -1;
+static int lsock = -1, usock = -1;
+// Discovery: Leaflet (the Mac app, or Leaflet Helper on Windows) broadcasts "leaflet-link?" to UDP port LL_PORT, and
+// Leaflet Link answers "leaflet-link <version> <card code>", so nobody has to type the 3DS's address.
+static void udp_start(void) {
+  if (usock >= 0) return;
+  usock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (usock < 0) return;
+  int one = 1; setsockopt(usock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+  struct sockaddr_in a = { 0 };
+  a.sin_family = AF_INET; a.sin_port = htons(LL_PORT); a.sin_addr.s_addr = htonl(INADDR_ANY);
+  if (bind(usock, (struct sockaddr *)&a, sizeof a) < 0) { close(usock); usock = -1; return; }
+  fcntl(usock, F_SETFL, fcntl(usock, F_GETFL, 0) | O_NONBLOCK);
+}
+static void udp_poll(void) {
+  if (usock < 0) return;
+  for (int i = 0; i < 8; i++) {
+    char buf[64]; struct sockaddr_in from; socklen_t fl = sizeof from;
+    ssize_t n = recvfrom(usock, buf, sizeof buf - 1, 0, (struct sockaddr *)&from, &fl);
+    if (n <= 0) return;
+    buf[n] = 0;
+    if (strncmp(buf, "leaflet-link?", 13)) continue;
+    char reply[64];
+    int k = snprintf(reply, sizeof reply, "leaflet-link %s %s", LL_VERSION, card.present && card.ds && card.code[0] ? card.code : "-");
+    sendto(usock, reply, (size_t)k, 0, (struct sockaddr *)&from, fl);
+  }
+}
 static struct { int fd; uint8_t *in; size_t inLen, need, hdrEnd; uint8_t *out; size_t outLen, sent; uint64_t t, closing; char ip[48]; } conn = { .fd = -1 };
 
 bool ll_net_start(void) {
@@ -785,9 +833,10 @@ bool ll_net_start(void) {
   a.sin_family = AF_INET; a.sin_port = htons(LL_PORT); a.sin_addr.s_addr = htonl(INADDR_ANY);
   if (bind(lsock, (struct sockaddr *)&a, sizeof a) < 0 || listen(lsock, 4) < 0) { close(lsock); lsock = -1; return false; }
   fcntl(lsock, F_SETFL, fcntl(lsock, F_GETFL, 0) | O_NONBLOCK);
+  udp_start();
   return true;
 }
-void ll_net_stop(void) { if (conn.fd >= 0) close(conn.fd); if (lsock >= 0) close(lsock); conn.fd = lsock = -1; }
+void ll_net_stop(void) { if (conn.fd >= 0) close(conn.fd); if (lsock >= 0) close(lsock); if (usock >= 0) close(usock); conn.fd = lsock = usock = -1; }
 
 static void json_str(char *o, size_t cap, const char *s) {
   size_t k = 0;
@@ -861,11 +910,13 @@ static void wall_text(int64_t t, char *out, size_t cap) {
   strftime(out, cap, "%Y-%m-%d %H:%M:%S", &tm);
 }
 
-static void send_sd_list(void) {
+// Starts a search unless one is running or just finished; answers with what's been found so far. Leaflet asks again
+// while "scanning" is true.
+static void send_sd_list(bool fresh) {
   if (!free_for_job()) { respond_error(409, "Leaflet Link is busy. Try again when the 3DS says it's done."); return; }
-  ll_sd_scan();
+  if (!scan.active && (fresh || !scan.done || plat_ms() - scan.done > 5000)) ll_sd_scan_begin();
   static char j[LL_SD_MAX * 700 + 64];
-  size_t k = (size_t)snprintf(j, sizeof j, "{\"saves\":[");
+  size_t k = (size_t)snprintf(j, sizeof j, "{\"scanning\":%s,\"saves\":[", scan.active ? "true" : "false");
   for (int i = 0; i < sdN; i++) {
     const LLSaveFile *e = &sdList[i];
     char p[340], tw[100], r[220], when[32];
@@ -961,7 +1012,7 @@ static void handle(void) {
     send_status();
     return;
   }
-  if (!strcmp(method, "GET") && !strcmp(target, "/sd")) { send_sd_list(); return; }
+  if (!strcmp(method, "GET") && !strcmp(target, "/sd")) { char f[4]; send_sd_list(query(q, "fresh", f, sizeof f)); return; }
   if (!strcmp(target, "/sd/file")) {
     char path[200];
     if (!query(q, "path", path, sizeof path) || path[0] != '/') { respond_error(400, "Missing path."); return; }
@@ -982,6 +1033,7 @@ static void drop(void) { if (conn.fd >= 0) close(conn.fd); conn.fd = -1; }
 
 void ll_net_poll(void) {
   if (lsock < 0) return;
+  udp_poll();
   if (conn.fd < 0) {
     struct sockaddr_in a; socklen_t al = sizeof a;
     int fd = accept(lsock, (struct sockaddr *)&a, &al);

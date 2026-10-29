@@ -44,6 +44,43 @@ enum LinkInstaller {
         return nil
     }
 
+    /// Finds Leaflet Link on the local network: it answers a "leaflet-link?" broadcast on UDP 8226 with
+    /// "leaflet-link <version> <card code>". Listens for `seconds`, or a moment after the first answer.
+    static func findLeafletLink(seconds: Double) -> [[String: String]] {
+        let s = socket(AF_INET, SOCK_DGRAM, 0)
+        guard s >= 0 else { return [] }
+        defer { close(s) }
+        var on: Int32 = 1
+        setsockopt(s, SOL_SOCKET, SO_BROADCAST, &on, 4)
+        _ = fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK)
+        var targets = broadcastAddresses()
+        // Tests: this Mac doesn't hear its own broadcasts, so a simulator on it is asked directly.
+        if let extra = ProcessInfo.processInfo.environment["LEAFLET_DISCOVERY_EXTRA"] { var a = in_addr(); if inet_pton(AF_INET, extra, &a) == 1 { targets.append(a) } }
+        var end = Date().addingTimeInterval(seconds), nextPing = Date.distantPast
+        var found: [[String: String]] = []
+        var buf = [UInt8](repeating: 0, count: 128)
+        while Date() < end {
+            if Date() >= nextPing {
+                for t in targets {
+                    var to = sockaddr_in(); to.sin_family = sa_family_t(AF_INET); to.sin_port = UInt16(8226).bigEndian; to.sin_addr = t
+                    _ = "leaflet-link?".withCString { p in withUnsafePointer(to: &to) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(s, p, 13, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } } }
+                }
+                nextPing = Date().addingTimeInterval(0.4)
+            }
+            var from = sockaddr_in(); var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+            let n = withUnsafeMutablePointer(to: &from) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(s, &buf, buf.count, 0, $0, &len) } }
+            if n > 0 {
+                let parts = String(decoding: buf[0..<n], as: UTF8.self).split(separator: " ").map(String.init)
+                let address = String(cString: inet_ntoa(from.sin_addr))
+                if parts.count >= 3, parts[0] == "leaflet-link", !found.contains(where: { $0["address"] == address }) {
+                    found.append(["address": address, "version": parts[1], "card": parts[2] == "-" ? "" : parts[2]])
+                    end = min(end, Date().addingTimeInterval(0.8))   // others on the network answer at about the same time
+                }
+            } else { usleep(20_000) }
+        }
+        return found
+    }
+
     /// 255.255.255.255 plus each network interface's own broadcast address (more reliable on Macs with several).
     static func broadcastAddresses() -> [in_addr] {
         var out = [in_addr(s_addr: INADDR_BROADCAST)]

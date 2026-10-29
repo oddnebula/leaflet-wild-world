@@ -83,6 +83,16 @@ def check(name, cond, info=''):
 def stop(p, d):
     p.terminate(); p.wait(); out = p.stdout.read(); shutil.rmtree(d); return out
 
+def sd_list(fresh=True):   # the SD card search runs in slices: ask until it's finished
+    q = '/sd?fresh=1' if fresh else '/sd'
+    for _ in range(400):
+        code, _, b = req('GET', q)
+        if code != 200: return code, None
+        j = json.loads(b)
+        if not j.get('scanning'): return code, j['saves']
+        q = '/sd'; time.sleep(0.02)
+    return 'timeout', None
+
 def console(p, line):   # a choice on the console's own menu
     p.stdin.write(line + '\n'); p.stdin.flush()
 
@@ -186,6 +196,13 @@ check('update: cancel on console leaves the old app', st['state'] == 'idle' and 
 # 16 the console's own Back up
 def status(): return json.loads(req('GET', '/status')[2])
 p, cp, d = run([])
+import socket
+u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); u.settimeout(2)
+u.sendto(b'leaflet-link?', ('127.0.0.1', 8226))
+try: ans = u.recvfrom(64)[0].decode()
+except OSError: ans = ''
+u.close()
+check('discovery: answers with its version and the card', ans.startswith('leaflet-link ') and ans.endswith(' ADME'), ans)
 info = json.loads(req('GET', '/info')[2]); check('info lists the new features', set(info.get('features', [])) >= {'sd', 'health'}, info)
 console(p, 'backup'); st = wait_end()
 bk = backups(d)
@@ -204,7 +221,7 @@ broken = bytearray(new); broken[0x300] ^= 0xFF      # a damaged Wild World save
 sd = {TW: pad, '/roms/nds/saves/Mario Kart DS.sav': other, '/roms/nds/Animal Crossing.sav2': bytes(broken),
       '/Nintendo 3DS/hidden/x.sav': new, '/3ds/LeafletLink/backups/2026-01-02 03.04.05 ADME backup.sav': orig, '/roms/nds/notes.txt': b'hi'}
 p, cp, d = run([], sd=sd)
-code, _, b = req('GET', '/sd'); lst = json.loads(b)['saves'] if code == 200 else []
+code, lst = sd_list(); lst = lst or []
 paths = [x['path'] for x in lst]
 check('SD list: finds the backup, the TWiLight save and the damaged one', set(paths) == {TW, '/roms/nds/Animal Crossing.sav2', '/3ds/LeafletLink/backups/2026-01-02 03.04.05 ADME backup.sav'}, paths)
 by = {x['path']: x for x in lst}
@@ -229,13 +246,24 @@ code, _, b = push_sd(TW, edited(0xC5)); check('SD write: region mismatch refused
 code, _, b = push_sd(TW, bytes(broken)); check('SD write: damaged save refused', code == 422, (code, b))
 # Console restore from the SD card onto the game card.
 console(p, 'scan'); time.sleep(0.3)
-code, _, b = req('GET', '/sd'); lst = json.loads(b)['saves']
+code, lst = sd_list()
 idx = [x['path'] for x in lst].index(TW)
 console(p, f'restore {idx}'); st = wait_end(); time.sleep(0.1)
 check('console restore: TWiLight save put on the game card', st['state'] == 'done' and st['kind'] == 'card' and 'Animal Crossing' in st['source'] and open(cp, 'rb').read() == orig, st)
 idx = [x['path'] for x in lst].index('/roms/nds/Animal Crossing.sav2')
 console(p, f'restore {idx}'); time.sleep(0.4); st = status()
 check('console restore: damaged save refused', st['state'] in ('done', 'idle') and open(cp, 'rb').read() == orig, st)
+stop(p, d)
+# A big SD card: the search runs in slices, so the 3DS keeps answering meanwhile.
+big = {f'/roms/nds/game{i:04d}/saves/game{i:04d}.sav': b'\x00' * 0x40000 for i in range(400)}
+big.update({f'/music/album{i:03d}/track{k:02d}.mp3': b'x' for i in range(60) for k in range(20)})
+big[TW] = pad
+p, cp, d = run([], sd=big)
+t0 = time.time(); code, _, b = req('GET', '/sd?fresh=1'); first = json.loads(b)
+info_ok = req('GET', '/info')[0] == 200
+code, lst = sd_list(fresh=False)
+check('big SD card: answers at once and keeps answering while it looks', first.get('scanning') is True and info_ok, first.get('scanning'))
+check('big SD card: finds the save among 1,600 files', lst is not None and [x['path'] for x in lst] == [TW], (code, lst and [x['path'] for x in lst]))
 stop(p, d)
 p, cp, d = run(['--answer', 'no'], sd={TW: pad}); push_sd(TW, orig); st = wait_end(); time.sleep(0.1)
 check('SD write: cancel on console leaves the file', st['state'] == 'idle' and open(os.path.join(d, 'sd', TW.lstrip('/')), 'rb').read() == pad, st); stop(p, d)

@@ -157,6 +157,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "melonWfcWrite":
             guard let b64 = body["data"] as? String, let data = Data(base64Encoded: b64) else { return }
             melonWfc(write: data)
+        case "findLink":
+            DispatchQueue.global(qos: .userInitiated).async {
+                let found = LinkInstaller.findLeafletLink(seconds: 3)
+                guard let json = try? JSONSerialization.data(withJSONObject: ["found": found]), let s = String(data: json, encoding: .utf8) else { return }
+                DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletLinkFound && LeafletLinkFound(\(s))") }
+            }
         case "install3ds":
             guard let b64 = body["data"] as? String, let app = Data(base64Encoded: b64) else { return }
             installOn3DS(app, address: (body["address"] as? String ?? "").trimmingCharacters(in: .whitespaces))

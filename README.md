@@ -109,7 +109,8 @@ done.
    **Y**, then click **Send to my 3DS** in Leaflet's **Cartridge Sync** page (Mac app, or Windows when you open
    Leaflet with **Start Leaflet**). You can also copy `LeafletLink.3dsx` to the SD card's `3ds` folder yourself.
    Later updates go over Wi-Fi too.
-2. Put the game card in and open Leaflet Link. Leaflet connects to it.
+2. Put the game card in and open Leaflet Link. Leaflet finds it on your Wi-Fi and connects (in a browser, type the
+   address the 3DS shows).
 3. Choose **Open in Leaflet**, **Save for an emulator** or **Send to the game card**.
 
 Sending is guarded at every step:

@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #ifndef LL_VERSION
-#define LL_VERSION "1.3"
+#define LL_VERSION "1.3.1"
 #endif
 #define LL_PROTOCOL 1
 #define LL_PORT 8226
@@ -140,7 +140,10 @@ bool ll_start_backup(char *why, size_t cap);   // copy the game card's save to t
 bool ll_start_health(char *why, size_t cap);   // read-only check of the save chip
 // Finds Wild World saves on the SD card: Leaflet Link's backups, and the save files of TWiLight Menu++,
 // nds-bootstrap forwarders and other DS homebrew loaders. Newest first.
-int ll_sd_scan(void);
+int ll_sd_scan(void);                // the whole search at once
+void ll_sd_scan_begin(void);         // or a slice at a time: ll_tick carries it on
+bool ll_sd_scan_step(uint32_t ms);
+bool ll_sd_scanning(void);
 const LLSaveFile *ll_sd_list(int *n);
 // Offers a save from the SD card for the game card: checked, then the person confirms, as with a save from Leaflet.
 bool ll_restore_from_sd(int index, char *why, size_t cap);

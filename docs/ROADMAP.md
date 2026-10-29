@@ -3,6 +3,47 @@
 A brainstorm of features beyond "edit every byte". Rough effort: S (an afternoon), M (a few days), L (a week or more).
 ★ marks the ones that seem most loved for the effort. ✅ marks what's built.
 
+## Next up, in order of impact (October 2026)
+
+Worked through in chunks, highest impact first. Each chunk ships as its own release.
+
+**Chunk 1: bugs and the 3DS found automatically**
+- [x] The Mac app on Intel Macs: checked under Rosetta; it starts and runs (the build warning is harmless).
+- [x] Leaflet Link keeps drawing while it looks through a large SD card.
+- [x] The Town Diary brings in the 3DS's whole backlog, not 24 versions per connection.
+- [x] Review Leaflet Helper (Windows) for PowerShell 5.1 quirks (JSON, file dialogs).
+- [x] Find the 3DS automatically, so nobody types its address.
+- [ ] Leaflet Link 1.3 on a real 3DS (needs the person's console).
+
+**Chunk 2: completionists**
+- [ ] Happy Room Academy calculator: each room scored the way the game does, with "add X for Y points".
+- [ ] Turnip advisor: the likely pattern from this week's prices, sell or wait.
+- [ ] One "100% town" score: museum, catalog, encyclopedia, songs, golden tools, perfect town, HRA.
+- [ ] Gyroid collection, with their sounds.
+- [ ] Emotion and hairstyle checklists.
+- [ ] K.K. jukebox: playlists, shuffle, missing songs.
+- [ ] Move-out predictor and the neighbor relationship web.
+
+**Chunk 3: fans**
+- [ ] Villager trading: export a neighbor and move them into another save.
+- [ ] Letter studio on the real stationery, in the game's font.
+- [ ] Town tune book.
+- [ ] Villager voices and a sound test.
+- [ ] The town tune with the game's real instrument.
+- [ ] Constellation gallery and share codes.
+
+**Chunk 4: more 3D (from your own ROM)**
+- [ ] Your resident in 3D: outfit, hair, tan, held tool.
+- [ ] Neighbors' houses in 3D.
+- [ ] A 3D night sky with Celeste's constellations.
+- [ ] Main Street in 3D: Nook's with this week's stock, the Able Sisters, the museum.
+- [ ] Walk around the whole town in 3D.
+
+**Chunk 5: polish**
+- [ ] Compare any two backups.
+- [ ] Undo history across every page.
+- [ ] Japanese and Korean saves.
+
 ## Living with your town
 - ✅ **Town diary (S–M).** Every backup is already a snapshot. Diff consecutive ones into a readable journal:
   "Oct 19: Bob moved in. Donated a coelacanth. Paid 98,000 bells on the loan. Limberg started gardening." A timeline

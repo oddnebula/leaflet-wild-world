@@ -250,6 +250,10 @@ connect Cartridge Sync to `127.0.0.1`.
 
 This is plain HTTP on port 8226, with CORS open so Leaflet can call it from a page or app.
 
+**Finding it (1.3.1).** Leaflet Link also listens on UDP port 8226. A `leaflet-link?` datagram (the Mac app and Leaflet
+Helper broadcast one) gets the answer `leaflet-link <version> <card code>` (`-` with no card), so Cartridge Sync finds
+the 3DS without its address being typed, and finds it again when the router gives it a new one.
+
 | Request | Answer |
 |---|---|
 | `GET /info` | app version, protocol, `features` (1.3: `sd`, `health`), the 3DS's clock, card (`present`, `code`, `ready`, `writable`, `why`), battery |
@@ -258,7 +262,7 @@ This is plain HTTP on port 8226, with CORS open so Leaflet can call it from a pa
 | `GET /status` | `state` (idle, confirm, backup, writing, verifying, restoring, done, failed, updating, checking), `kind` (card, update, sdfile, backup, health), progress, message, backup path, and for a health check `health` (passes, unstable areas, flipped bits, checksums) |
 | `POST /cancel` | sets aside a save that hasn't been confirmed, or stops a health check |
 | `POST /health` | starts the health check (1.3) |
-| `GET /sd` | Wild World saves on the SD card: path, town, residents, size, when it was saved (3DS clock), region, `ok`, `kind` (backup or game) (1.3) |
+| `GET /sd[?fresh=1]` | starts looking through the SD card (unless a search just finished) and answers at once with `scanning` and what's been found so far; ask again while `scanning` is true (1.3.1). Wild World saves on the SD card: path, town, residents, size, when it was saved (3DS clock), region, `ok`, `kind` (backup or game) (1.3) |
 | `GET /sd/file?path=` | the first 256 KB of a listed save, with its CRC-32 (1.3) |
 | `POST /sd/file?path=&crc=&town=&residents=&job=` | a 256 KB save for a listed game save file; checked, then waits for A on the 3DS (1.3) |
 | `POST /update?crc=&version=&job=` | a new `LeafletLink.3dsx`; checked (CRC, 3DSX header), then waits for A on the 3DS |

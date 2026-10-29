@@ -12,6 +12,7 @@
 # Works in Windows PowerShell 5.1 and PowerShell 7. ASCII only, so 5.1 reads it correctly.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -362,6 +363,33 @@ function Install3DS([byte[]]$app, [string]$address) {
   finally { if ($tcp) { $tcp.Close() } }
 }
 
+# ---------- finding Leaflet Link on the network ----------
+# Leaflet Link answers a "leaflet-link?" broadcast on UDP 8226 with "leaflet-link <version> <card code>".
+function FindLink([double]$seconds) {
+  $found = New-Object System.Collections.ArrayList
+  $udp = New-Object System.Net.Sockets.UdpClient
+  try {
+    $udp.EnableBroadcast = $true; $udp.Client.ReceiveTimeout = 200
+    $ping = [Text.Encoding]::ASCII.GetBytes('leaflet-link?')
+    $everyone = New-Object Net.IPEndPoint([Net.IPAddress]::Broadcast, 8226)
+    $end = (Get-Date).AddSeconds($seconds); $next = Get-Date
+    while ((Get-Date) -lt $end) {
+      if ((Get-Date) -ge $next) { [void]$udp.Send($ping, $ping.Length, $everyone); $next = (Get-Date).AddMilliseconds(400) }
+      try {
+        $from = New-Object Net.IPEndPoint([Net.IPAddress]::Any, 0)
+        $parts = [Text.Encoding]::ASCII.GetString($udp.Receive([ref]$from)).Split(' ')
+        $address = $from.Address.ToString()
+        if ($parts.Count -ge 3 -and $parts[0] -eq 'leaflet-link' -and -not ($found | Where-Object { $_.address -eq $address })) {
+          $card = $parts[2]; if ($card -eq '-') { $card = '' }
+          [void]$found.Add(@{ address = $address; version = $parts[1]; card = $card })
+          $soon = (Get-Date).AddMilliseconds(800); if ($soon -lt $end) { $end = $soon }   # others answer at about the same time
+        }
+      } catch { }   # nothing yet (the receive timed out)
+    }
+  } catch { } finally { $udp.Close() }
+  Emit 'LeafletLinkFound' @{ found = $found.ToArray() }
+}
+
 # ---------- commands from the page ----------
 # Slow ones (searching drives, installing Leaflet Link) wait for the next turn of the loop, so the answer goes back first.
 $script:later = $null
@@ -383,6 +411,7 @@ function Command($m) {
       'melonWfcWrite' { MelonWfc ([string]$m.data) }
       'findSaves' { $script:later = @{ kind = 'find'; roots = (RemovableDrives) } }
       'findSavesIn' { $f = ChooseFolder 'Choose an SD card or folder to search for Wild World saves'; if ($f) { $script:later = @{ kind = 'find'; roots = @($f) } } else { Emit 'LeafletSaves' @{ results = @(); searched = @() } } }
+      'findLink' { $script:later = @{ kind = 'findLink' } }
       'install3ds' { $script:later = @{ kind = 'install'; app = [Convert]::FromBase64String([string]$m.data); address = ([string]$m.address).Trim() } }
       default { }
     }
@@ -474,7 +503,9 @@ if (Test-Path -LiteralPath $infoFile) {
   } catch { }
 }
 
-$token = -join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+$rng = New-Object Security.Cryptography.RNGCryptoServiceProvider
+$tb = New-Object byte[] 16; $rng.GetBytes($tb)
+$token = -join ($tb | ForEach-Object { $_.ToString('x2') })   # 32 hex digits from a cryptographic source
 $listener = $null; $port = 0
 foreach ($p in 8227..8240) {
   try { $l = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, $p); $l.Start(); $listener = $l; $port = $p; break } catch { }
@@ -491,7 +522,7 @@ try {
     if ($listener.Pending()) { Serve $listener.AcceptTcpClient() } else { Start-Sleep -Milliseconds 25 }
     if ($script:later) {
       $job = $script:later; $script:later = $null
-      try { if ($job.kind -eq 'find') { FindSaves @($job.roots) } else { Install3DS $job.app $job.address } } catch { Log "later: $($_.Exception.Message)" }
+      try { if ($job.kind -eq 'find') { FindSaves @($job.roots) } elseif ($job.kind -eq 'findLink') { FindLink 3 } else { Install3DS $job.app $job.address } } catch { Log "later: $($_.Exception.Message)" }
     }
     StepDownload
     StepEmulator

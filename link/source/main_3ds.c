@@ -285,7 +285,11 @@ static Box row_box(int i) { return (Box){ 14, 34 + i * 40, 292, 38 }; }
 static void saves_list(bool touching, touchPosition tp) {
   int n; const LLSaveFile *l = ll_sd_list(&n);
   text("Saves on the SD card", 160, 8, 0.55f, INK, CENTER, 0);
-  if (listScan) { C2D_DrawCircleSolid(160, 110, 0, 6 + 3 * sinf(anim * 6), LEAF); text("Looking\xE2\x80\xA6", 160, 126, 0.5f, MUTED, CENTER, 0); }
+  if (listScan) {
+    C2D_DrawCircleSolid(160, 110, 0, 6 + 3 * sinf(anim * 6), LEAF);
+    char line[64]; snprintf(line, sizeof line, n ? "Looking\xE2\x80\xA6 %d found so far" : "Looking\xE2\x80\xA6", n);
+    text(line, 160, 126, 0.5f, MUTED, CENTER, 0);
+  }
   else if (!n) { panel(14, 34, 292, 150, CARD); text("Nothing here yet.", 160, 90, 0.6f, MUTED, CENTER, 0); }
   for (int i = 0; !listScan && i < ROWS && first + i < n; i++) {
     const LLSaveFile *e = &l[first + i];
@@ -475,7 +479,7 @@ int main(int argc, char **argv) {
     } else if (now == LL_IDLE) {
       if ((down & KEY_X) || (tapped && hit(btnX, lastTouch))) { if (!ll_start_backup(why, sizeof why)) note(why); }
       else if ((down & KEY_R) || (tapped && hit(btnR, lastTouch))) { if (!ll_start_health(why, sizeof why)) note(why); }
-      else if ((down & KEY_Y) || (tapped && hit(btnY, lastTouch))) { listOpen = listScan = true; sel = first = 0; notice[0] = 0; }
+      else if ((down & KEY_Y) || (tapped && hit(btnY, lastTouch))) { listOpen = listScan = true; sel = first = 0; notice[0] = 0; ll_sd_scan_begin(); }
     } else if (now == LL_CHECKING) {
       if ((down & KEY_B) || (tapped && hit(btnStop, lastTouch))) ll_answer(false);
     } else if (now == LL_CONFIRM) {
@@ -502,8 +506,8 @@ int main(int argc, char **argv) {
     C2D_SceneBegin(bot);
     bottom_screen(touching, tp);
     C3D_FrameEnd(0);
-    // Looking through the SD card takes a moment, so it starts after the "Looking" screen has been drawn once.
-    if (listScan) { ll_sd_scan(); listScan = false; }
+    // ll_tick looks through the SD card a slice at a time; the list shows once it's done.
+    if (listScan && !ll_sd_scanning()) listScan = false;
   }
 
   plat_hold(false);

@@ -433,7 +433,12 @@
     if (listing) return listing;   // one look at a time
     T.busy = true; T.err = ''; if (!quiet) paint();
     // A busy 3DS (say, waiting for A) keeps the list it had.
-    listing = json('/sd', {}, 30000).then(j => { T.list = j.saves; }, e => { if (!T.list) T.err = e.message; }).then(() => { T.busy = false; listing = null; paint(); });
+    // Leaflet Link 1.3.1 looks through the SD card a slice at a time and says "scanning" until it's done.
+    listing = (async () => {
+      let j = await json('/sd?fresh=1', {}, 30000);
+      for (let i = 0; j.scanning && i < 300; i++) { await new Promise(r => setTimeout(r, 300)); j = await json('/sd', {}, 30000); }
+      T.list = j.saves;
+    })().catch(e => { if (!T.list) T.err = e.message; }).then(() => { T.busy = false; listing = null; paint(); });
     return listing;
   }
   // The Town Diary: versions of the town the 3DS kept on its SD card (Leaflet Link's backups, and TWiLight Menu++ saves)
@@ -441,7 +446,8 @@
   async function diaryFromSD() {
     if (!window.Backups || !feature('sd')) return;
     await listSD(true);
-    const seen = imported.get(), todo = (T.list || []).filter(x => x.ok && !seen.has(`${x.path}|${x.size}|${x.saved}`)).slice(0, 24);
+    // The whole backlog, oldest first; it stops when you start something else and carries on next time.
+    const seen = imported.get(), todo = (T.list || []).filter(x => x.ok && !seen.has(`${x.path}|${x.size}|${x.saved}`)).reverse();
     let added = 0;
     for (const x of todo) {
       if (S.phase !== 'ready') break;
@@ -717,6 +723,22 @@
   }
   function errBox() { return S.err ? h('div', { class: 'sync-msg bad' }, '⚠️ ', S.err) : S.note ? h('div', { class: 'sync-msg' }, '↩️ ', S.note) : null; }
 
+  // ---------- finding Leaflet Link on the network (Mac app and Windows: Leaflet Link 1.3.1 answers a broadcast) ----------
+  // auto: looked for by itself (no address yet, or the old one stopped answering), so finding nothing stays quiet.
+  let findAuto = false;
+  function findLink(auto) {
+    if (!native || S.finding) return;
+    findAuto = !!auto; S.finding = true; S.err = ''; if (!auto) sfx.click(); paint();
+    native.postMessage({ cmd: 'findLink' });
+  }
+  window.LeafletLinkFound = info => {
+    S.finding = false;
+    const found = (info.found || []).slice().sort((a, b) => (b.card ? 1 : 0) - (a.card ? 1 : 0));   // a 3DS with a game card in first
+    if (found.length) { S.addr = found[0].address; paint(); connect(); return; }
+    if (!findAuto) { S.err = 'No 3DS answered. Check Leaflet Link is open and the 3DS is on the same Wi-Fi, or type the address it shows. (Leaflet Link 1.3 and earlier don’t answer; type the address once and update it.)'; sfx.error(); }
+    paint();
+  };
+
   function connectCard() {
     const inp = h('input', { class: 'field sync-addr', placeholder: '192.168.1.23', value: S.addr, inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false' });
     inp.oninput = () => { S.addr = inp.value; };
@@ -725,9 +747,12 @@
     return h('div', { class: 'card pad sync-connect' },
       h('ol', { class: 'sync-steps' },
         h('li', null, h('b', null, 'Insert your Wild World game card, '), 'then open Leaflet Link from the Homebrew Launcher.'),
-        h('li', null, h('b', null, 'Type the address the 3DS shows. '), 'Both need to be on the same Wi-Fi.')),
-      h('div', { class: 'sync-row' }, inp,
-        h('button', { class: 'btn leaf big', disabled: busy, onclick: () => connect() }, busy ? 'Connecting…' : 'Connect')),
+        native ? h('li', null, h('b', null, 'Click Find my 3DS, '), 'or type the address the 3DS shows. Both need to be on the same Wi-Fi.')
+          : h('li', null, h('b', null, 'Type the address the 3DS shows. '), 'Both need to be on the same Wi-Fi.')),
+      h('div', { class: 'sync-row' },
+        native ? h('button', { class: 'btn leaf big', disabled: busy || S.finding, onclick: () => findLink(false) }, S.finding ? 'Looking for your 3DS…' : '🔎 Find my 3DS') : null,
+        inp,
+        h('button', { class: 'btn big' + (native ? '' : ' leaf'), disabled: busy || S.finding, onclick: () => connect() }, busy ? 'Connecting…' : 'Connect')),
       errBox());
   }
 
@@ -939,7 +964,11 @@
     render(s, ctx) {
       root = h('div', { class: 'sync' });
       root.append(...body());
-      if (!ctx.indexing && S.phase === 'off' && S.addr && !S.err && !S.tried) { S.tried = true; setTimeout(() => connect(true).then(ok => { if (!ok && S.phase === 'connecting') { S.phase = 'off'; paint(); } }), 0); }
+      // The address that worked last time, else a look around the network (it may have a new address).
+      if (!ctx.indexing && S.phase === 'off' && (S.addr || native) && !S.err && !S.tried) {
+        S.tried = true;
+        setTimeout(async () => { const ok = S.addr.trim() ? await connect(true) : false; if (!ok) { if (S.phase === 'connecting') S.phase = 'off'; paint(); findLink(true); } }, 0);
+      }
       return root;
     },
   });
