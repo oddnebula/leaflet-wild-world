@@ -261,7 +261,7 @@ static void top_screen(void) {
   // Wi-Fi line.
   C2D_DrawCircleSolid(36, 110, 0, 7, netOk ? LEAF : wifiOk ? AMBER : GREY);
   char net[96];
-  if (netOk) snprintf(net, sizeof net, "Wi-Fi connected: %s", ipText);
+  if (netOk) snprintf(net, sizeof net, "Wi-Fi connected: %s%s", ipText, ll_discovery_on() ? "" : " (Find my 3DS off)");
   else snprintf(net, sizeof net, wifiOk ? "Wi-Fi on, but port %d couldn't open" : "Not connected to Wi-Fi", LL_PORT);
   text(net, 50, 100, 0.55f, INK, LEFT, 0);
 

@@ -18,8 +18,10 @@
   function buildNav() {
     const nav = $('nav');
     nav.replaceChildren();
+    // Pages are listed by group (in the order each group first appears), whatever order their scripts loaded in.
+    const groups = [...new Set(VIEWS.map(v => v.group))];
     let group = null;
-    for (const v of VIEWS) {
+    for (const v of groups.flatMap(g => VIEWS.filter(x => x.group === g))) {
       if (v.hidden && v.hidden(state.save)) continue;
       if (v.group !== group) { group = v.group; nav.append(h('div', { class: 'nav-group' }, group)); }
       const badge = state.save && v.badge ? v.badge(state.save) : '';
@@ -180,7 +182,7 @@
     const s = state.save;
     $('saveBtn').disabled = !s;
     $('undoBtn').disabled = !(s && s.canUndo); $('redoBtn').disabled = !(s && s.canRedo);
-    if (s && s.canUndo) { const u = s.history.undo[s.history.undo.length - 1]; $('undoBtn').title = `Undo${u.label ? ` (a change on ${u.label})` : ''} (⌘Z)`; }
+    if (s && s.canUndo) { const u = s.history.undo[s.history.undo.length - 1]; $('undoBtn').title = `Undo${u.label ? ` (a change on ${u.label})` : ''} (${UI.mod}Z)`; }
     $('saveBtn').classList.toggle('pulse', !!(s && s.dirty));
     const chip = $('bellChip');
     if (s && s.playerExists(0)) {
@@ -194,6 +196,8 @@
   }
 
   // ---------- chrome wiring ----------
+  // The toolbar's shortcut hints, written for a Mac in index.html, say Ctrl elsewhere.
+  if (UI.mod !== '⌘') document.querySelectorAll('.tb-btn[title]').forEach(b => { b.title = b.title.replace('⇧⌘', 'Ctrl+Shift+').replace('⌘', 'Ctrl+'); });
   $('openBtn').addEventListener('click', () => { sfx.click(); openFile(); });
   $('saveBtn').addEventListener('click', saveFile);
   const soundBtn = $('soundBtn');
@@ -202,7 +206,7 @@
   drawSound();
   $('guideSprout').addEventListener('click', () => {
     const v = VIEWS.find(x => x.id === state.view);
-    const tips = (v && v.tips) || ['Tip: right-click any item slot to empty it.', 'Tip: press ⌘F to search every option in the editor.', 'Tip: ⌘S saves a fresh copy with all checksums fixed.'];
+    const tips = (v && v.tips) || ['Tip: right-click any item slot to empty it.', `Tip: press ${UI.mod}F to search every option in the editor.`, `Tip: ${UI.mod}S saves a fresh copy with all checksums fixed.`];
     say(tips[Math.floor(Math.random() * tips.length)]);
   });
   $('globalSearch').addEventListener('input', e => runSearch(e.target.value));
@@ -274,7 +278,7 @@
           ROM.stale ? h('button', { class: 'btn small', onclick: pickRom }, 'Open ROM again…') : null,
           h('button', { class: 'btn small', onclick: ROM.ready ? () => ROM.forget() : pickRom }, ROM.ready ? 'Forget game art' : 'Open ROM…')),
         (() => { const slot = h('div'); if (window.Backups) Backups.draftNotice().then(c => { if (c) slot.replaceWith(c); }); return slot; })(),
-        h('div', { class: 'fine' }, 'Works with USA and European saves (256 KB) from flashcarts, DeSmuME, melonDS and save dumpers.', h('br'), 'Shortcuts: ', h('span', { class: 'kbd' }, '⌘O'), ' open · ', h('span', { class: 'kbd' }, '⌘S'), ' save · ', h('span', { class: 'kbd' }, '⌘F'), ' search')));
+        h('div', { class: 'fine' }, 'Works with USA and European saves (256 KB) from flashcarts, DeSmuME, melonDS and save dumpers.', h('br'), 'Shortcuts: ', h('span', { class: 'kbd' }, UI.mod + 'O'), ' open · ', h('span', { class: 'kbd' }, UI.mod + 'S'), ' save · ', h('span', { class: 'kbd' }, UI.mod + 'F'), ' search')));
     },
   });
 

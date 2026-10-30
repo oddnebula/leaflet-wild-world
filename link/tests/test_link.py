@@ -136,6 +136,10 @@ check('card untouched after cancel', open(cp, 'rb').read() == orig); stop(p, d)
 # 5 chip that only takes erase + program
 p, cp, d = run(['--chip', 'plain']); push(new); st = wait_end(); time.sleep(0.1)
 check('plain chip: falls back and saves', st['state'] == 'done' and open(cp, 'rb').read() == new, st); stop(p, d)
+p, cp, d = run(['--chip', 'sanyo']); info = json.loads(req('GET', '/info')[2])
+check('Sanyo chip (62 16 00): known as 256 KB and writable', info['card']['size'] == 262144 and info['card']['writable'], info['card'])
+push(new); st = wait_end(); time.sleep(0.1)
+check('Sanyo chip: saves', st['state'] == 'done' and open(cp, 'rb').read() == new, st); stop(p, d)
 
 # 6 flaky reads
 p, cp, d = run(['--flaky-reads', '97'])

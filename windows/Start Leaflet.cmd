@@ -15,8 +15,15 @@ for /l %%i in (1,1,15) do (
 
 :plain
 set "PAGE=%~dp0app\index.html"
-set "URL=file:///%PAGE:\=/%"
 set "PROFILE=%LOCALAPPDATA%\Leaflet\profile"
+rem A file URL: % # and spaces escaped (a # would end the path), backslashes turned around. Delayed expansion only
+rem starts after PAGE is set, so a ! in the folder name survives.
+setlocal EnableDelayedExpansion
+set "U=!PAGE:%%=%%25!"
+set "U=!U:#=%%23!"
+set "U=!U: =%%20!"
+set "U=!U:\=/!"
+set "URL=file:///!U!"
 
 for %%B in (
   "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
@@ -26,7 +33,7 @@ for %%B in (
   "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 ) do (
   if exist %%B (
-    start "" %%B --app="%URL%" --user-data-dir="%PROFILE%" --window-size=1240,820 --no-first-run
+    start "" %%B --app="!URL!" --user-data-dir="!PROFILE!" --window-size=1240,820 --no-first-run
     exit /b 0
   )
 )

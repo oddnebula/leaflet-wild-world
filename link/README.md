@@ -252,7 +252,14 @@ This is plain HTTP on port 8226, with CORS open so Leaflet can call it from a pa
 
 **Finding it (1.3.1).** Leaflet Link also listens on UDP port 8226. A `leaflet-link?` datagram (the Mac app and Leaflet
 Helper broadcast one) gets the answer `leaflet-link <version> <card code>` (`-` with no card), so Cartridge Sync finds
-the 3DS without its address being typed, and finds it again when the router gives it a new one.
+the 3DS without its address being typed, and finds it again when the router gives it a new one. Since 1.3.2 the socket is opened again every few seconds until it works (for example while Wi-Fi is still
+connecting), `/info` says `"discovery": true` or `false`, and the top screen adds "(Find my 3DS off)" when it isn't
+listening.
+
+**Save chips (1.3.2).** Most flash chips give their size in the third byte of their ID. The Sanyo LE25FW203T in some
+Wild World cards answers `62 16 00`, so Leaflet Link knows it from a small table (256 KB). Writing tries page write,
+then page erase and program, then sector erase and program, and reads every page back, so a chip that doesn't take one
+method is still written correctly, and the original is put back if a page can't be.
 
 | Request | Answer |
 |---|---|

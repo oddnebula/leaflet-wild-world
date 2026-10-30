@@ -122,7 +122,8 @@
       }
       const t = floorTile(e); return t ? { tile: t, owner: own.get(at(...t)) || null } : null;
     }
-    const commit = (ok, msg) => { if (ok) { sfx.bell(); refocus = true; refresh(); } else { sfx.error(); toast(msg || 'It doesn’t fit there', '🪑'); } };
+    // Each move, turn or put-away is its own undo step.
+    const commit = (ok, msg) => { if (ok) { s.sealStep(); sfx.bell(); refocus = true; refresh(); } else { sfx.error(); toast(msg || 'It doesn’t fit there', '🪑'); } };
     const moveSel = to => { if (!sel || (to[0] === sel[0] && to[1] === sel[1])) return; const ok = movePiece(s, r, area, sel, to); if (ok) sel = to; commit(ok); };
     const cv = window.Model3D.viewer(sc.groups.concat(marks()), {
       size: Math.min(620, Math.max(320, (document.getElementById('content')?.clientWidth || 700) - 80)), spin: false, zoom: 1.55, view: view3,
@@ -131,33 +132,35 @@
         cv.focus();
         const k = hit(e); if (!k || !k.owner) return null;
         sel = k.owner; const id = s.u16(r + at(...sel) * 2), off = [k.tile[0] - sel[0], k.tile[1] - sel[1]];
-        cv.update(sc.groups.concat(marks())); info.textContent = label();
+        cv.update(sc.groups.concat(marks())); showPick();
         let to = sel;
         return {
           move(ev) { const t = floorTile(ev); if (!t) return; const nt = [t[0] - off[0], t[1] - off[1]]; if (nt[0] === to[0] && nt[1] === to[1]) return; to = nt; cv.update(sc.groups.concat(marks({ id, to, ok: fits(s, r, area, sel, to, id) }))); },
-          up(ev, still) { if (still) { sfx.pop(); info.textContent = label(); return; } if (to[0] === sel[0] && to[1] === sel[1]) { cv.update(sc.groups.concat(marks())); return; } moveSel(to); if (!fits(s, r, area, sel, sel, id)) cv.update(sc.groups.concat(marks())); },
+          up(ev, still) { if (still) { sfx.pop(); showPick(); return; } if (to[0] === sel[0] && to[1] === sel[1]) { cv.update(sc.groups.concat(marks())); return; } moveSel(to); if (!fits(s, r, area, sel, sel, id)) cv.update(sc.groups.concat(marks())); },
         };
       },
-      click: e => { const k = hit(e); if (sel && k && !k.owner) moveSel(k.tile); else if (sel) { sel = null; cv.update(sc.groups.concat(marks())); info.textContent = label(); } },
+      click: e => { const k = hit(e); if (sel && k && !k.owner) moveSel(k.tile); else if (sel) { sel = null; cv.update(sc.groups.concat(marks())); showPick(); } },
     });
     if (!cv) return need('3D needs WebGL, which this browser has turned off.');
     cv.tabIndex = 0; cv.classList.add('room3d-canvas');
     const label = () => sel ? `Picked: ${item(s.u16(r + at(...sel) * 2)).name} · drag it, click a free spot, arrow keys to nudge, R to turn, Delete to put away` : 'Drag a piece to move it · click one to pick it · drag the floor to look around';
     const info = h('div', { class: 'muted room3d-info' }, label());
+    const turnBtn = h('button', { class: 'btn small', disabled: !sel, onclick: () => turn() }, '↻ Turn'), awayBtn = h('button', { class: 'btn small', disabled: !sel, onclick: () => remove() }, '🗑 Put away');
+    // The line under the room and the buttons follow whichever piece is picked.
+    function showPick() { info.textContent = label(); turnBtn.disabled = awayBtn.disabled = !sel; }
     const turn = () => { if (!sel) return; const id = s.u16(r + at(...sel) * 2); commit(movePiece(s, r, area, sel, sel, turned(id)), 'There’s no room to turn it'); };
-    const remove = () => { if (!sel) return; const nm = item(s.u16(r + at(...sel) * 2)).name; removePiece(s, r, sel); sel = null; sfx.toggle(false); toast(`Put away the ${nm} (⌘Z to undo)`, '🪑'); refocus = true; refresh(); };
+    const remove = () => { if (!sel) return; const nm = item(s.u16(r + at(...sel) * 2)).name; removePiece(s, r, sel); s.sealStep(); sel = null; sfx.toggle(false); toast(`Put away the ${nm} (${UI.mod}Z to undo)`, '🪑'); refocus = true; refresh(); };
     cv.addEventListener('keydown', e => {
       const k = e.key, d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[k];
       if (d && sel) { e.preventDefault(); moveSel([sel[0] + d[0], sel[1] + d[1]]); }
       else if ((k === 'r' || k === 'R') && sel) { e.preventDefault(); turn(); }
       else if ((k === 'Delete' || k === 'Backspace') && sel) { e.preventDefault(); remove(); }
-      else if (k === 'Escape' && sel) { sel = null; cv.update(sc.groups.concat(marks())); info.textContent = label(); }
+      else if (k === 'Escape' && sel) { sel = null; cv.update(sc.groups.concat(marks())); showPick(); }
     });
     if (refocus) { refocus = false; setTimeout(() => cv.isConnected && cv.focus(), 0); }
     return h('div', { class: 'room3d' }, cv, info,
       h('div', { class: 'btn-row', style: { justifyContent: 'center', marginTop: '8px' } },
-        h('button', { class: 'btn small', disabled: !sel, onclick: turn }, '↻ Turn'),
-        h('button', { class: 'btn small', disabled: !sel, onclick: remove }, '🗑 Put away'),
+        turnBtn, awayBtn,
         Postcard.button(() => { cv.draw(); return cv; }, `${title} at home in ${s.str(4, 8)}`, `${s.str(4, 8)} ${title}`)),
       sc.missing.length ? h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, `${sc.missing.length} piece${sc.missing.length === 1 ? ' has' : 's have'} no model in the ROM and isn’t shown.`) : null);
   }
@@ -189,7 +192,7 @@
           if (fx === tx && fy === ty) return;
           // With the ROM, a piece moves with every tile it covers; without it, the two spots swap as before.
           if (isFtr(s.u16(r + at(fx, fy) * 2)) && exact()) {
-            if (movePiece(s, r, area, [fx, fy], [tx, ty], undefined, copy)) { sfx.bell(); refresh(); } else { sfx.error(); toast('It doesn’t fit there', '🪑'); }
+            if (movePiece(s, r, area, [fx, fy], [tx, ty], undefined, copy)) { s.sealStep(); sfx.bell(); refresh(); } else { sfx.error(); toast('It doesn’t fit there', '🪑'); }
             return;
           }
           for (const L of [0, 0x200]) {

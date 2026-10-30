@@ -142,7 +142,7 @@ final class EmulatorSession {
         try JSONSerialization.data(withJSONObject: info).write(to: sessionFile, options: .atomic)
 
         lastSeen = save
-        launch(emulator)
+        launch(emulator, fresh: true)
     }
 
     /// Plays the session's town again (after "Keep playing"), from the save melonDS last wrote.
@@ -156,13 +156,15 @@ final class EmulatorSession {
         launch(emulator)
     }
 
-    private func launch(_ emulator: URL) {
+    /// fresh: a new session, undone if melonDS won't open (otherwise every later Play would find a town "played earlier").
+    private func launch(_ emulator: URL, fresh: Bool = false) {
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.arguments = [romCopy.path]
         cfg.activates = true
         NSWorkspace.shared.openApplication(at: emulator, configuration: cfg) { running, error in
             DispatchQueue.main.async {
                 guard let running = running, error == nil else {
+                    if fresh { self.close() }
                     // A downloaded app that macOS hasn't let open yet: it's waiting for "Open Anyway" in Privacy & Security.
                     let downloaded = (try? emulator.resourceValues(forKeys: [.quarantinePropertiesKey]))?.quarantineProperties != nil
                     self.report(["state": "error", "blocked": downloaded, "error": downloaded

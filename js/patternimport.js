@@ -141,7 +141,7 @@
       fileIn.accept = tab === 'file' ? '.acww,.acnl,.bin' : 'image/*';
       const drop = h('div', { class: 'drop', style: { padding: '20px', borderRadius: '16px' } },
         h('div', { style: { fontSize: '30px' } }, tab === 'qr' ? '📱' : tab === 'file' ? '📄' : '🖼️'),
-        h('div', { style: { fontWeight: 750, margin: '6px 0' } }, 'Drop it here, paste it (⌘V), or'),
+        h('div', { style: { fontWeight: 750, margin: '6px 0' } }, `Drop it here, paste it (${UI.mod}V), or`),
         h('button', { class: 'btn leaf', onclick: () => fileIn.click() }, 'Choose…'));
       drop.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); });
       drop.addEventListener('dragleave', () => drop.classList.remove('over'));

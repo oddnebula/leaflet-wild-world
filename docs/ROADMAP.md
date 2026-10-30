@@ -92,6 +92,19 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 **Research still open:** the remaining unnamed flags (see RESEARCH.md), Feng Shui scoring, move-out rules, Wendell's
 design pixels, gyroid sound IDs, villager voice pitch, MelodyPlayer, JP/KR saves.
 
+## Fixes from testing on Windows (October 29, 2026)
+- [x] Install melonDS picks the build for the PC's architecture and checks the exe's machine type (it installed the
+  ARM64 build on x64 PCs).
+- [x] A failed melonDS launch no longer leaves a stuck session (Windows and Mac).
+- [x] Leaflet Helper doesn't quit while a dialog is open or news is waiting; the page says when the helper has stopped.
+- [x] Leaflet Link 1.3.2: the Sanyo LE25FW203T (62 16 00) is known as 256 KB; discovery retries and reports itself.
+  Still to test on that card: a real write.
+- [x] Modern folder picker, an invisible dialog owner, broadcasts on every adapter, a UTF-8 log, `#` and `%` in the
+  fallback path.
+- [x] My House Turn/Put away buttons, each 3D action its own undo step, "null" on Cartridge Sync, sidebar groups shown
+  once, Ctrl+ instead of ⌘ off the Mac, "No SD card found", melonDS's file path on Windows.
+- [ ] Use Leaflet from a web page (GitHub Pages) and on phones: menu on small screens, touch controls, what needs the app.
+
 ## Living with your town
 - ✅ **Town diary (S–M).** Every backup is already a snapshot. Diff consecutive ones into a readable journal:
   "Oct 19: Bob moved in. Donated a coelacanth. Paid 98,000 bells on the loan. Limberg started gardening." A timeline

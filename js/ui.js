@@ -1,5 +1,7 @@
 // Shared UI kit: element builder, item catalogue, bound form rows, picker, sound, guide, toasts.
 (function () {
+  // Shortcut labels: ⌘ on a Mac, Ctrl+ everywhere else.
+  const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
   'use strict';
   const D = window.WW_DATA;
 
@@ -384,6 +386,6 @@
   window.UI = {
     h, hex, fmt, item, itemEmoji, itemIcon, itemLabel, CATEGORIES, CAT_EMOJI, sfx, tone, setSound, get soundOn() { return soundOn; },
     say, toast, confetti, registry, register, setRegistryView, setRegistryTab, tabOf, setTab, row, guard, card, section,
-    numberInput, textInput, selectInput, switchInput, seg, stepper, slot, pickItem, confirmSheet, drawPattern,
+    mod: MOD, numberInput, textInput, selectInput, switchInput, seg, stepper, slot, pickItem, confirmSheet, drawPattern,
   };
 })();

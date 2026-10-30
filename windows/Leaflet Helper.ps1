@@ -25,7 +25,7 @@ $logFile = Join-Path $data 'helper.log'
 New-Item -ItemType Directory -Force -Path $data | Out-Null
 $SaveSize = 0x40000
 
-function Log($text) { try { Add-Content -Path $logFile -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $text) } catch { } }
+function Log($text) { try { Add-Content -Path $logFile -Encoding UTF8 -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $text) } catch { } }
 function Stamp { return (Get-Date).ToString('yyyy-MM-dd HH.mm.ss') }
 function B64([byte[]]$b) { return [Convert]::ToBase64String($b) }
 function Prefix([byte[]]$b, [int]$n) { $o = New-Object byte[] $n; [Array]::Copy($b, $o, $n); return ,$o }
@@ -138,7 +138,13 @@ function EmuPlay($m) {
   WriteChecked $startFile $start
   @{ town = [string]$m.town; cardCode = [string]$m.cardCode; started = [DateTimeOffset]::Now.ToUnixTimeSeconds() } | ConvertTo-Json | Set-Content -LiteralPath $sessionFile -Encoding UTF8
   $script:lastSeen = $save
-  Launch $exe
+  # If melonDS won't start, nothing is left half-done: the session is removed and the new save kept aside.
+  try { Launch $exe } catch {
+    $script:proc = $null
+    Remove-Item -LiteralPath $sessionFile, $startFile -ErrorAction SilentlyContinue
+    MoveSaveAside
+    throw "melonDS couldn't start: $($_.Exception.Message)"
+  }
 }
 function EmuResume {
   if ($script:proc) { throw 'melonDS is already playing.' }
@@ -148,7 +154,8 @@ function EmuResume {
   if (MelonRunning) { throw 'melonDS is already open. Close it first.' }
   if (-not (Test-Path -LiteralPath $romCopy)) { throw 'The ROM copy is missing. Set this town aside and start again.' }
   $script:lastSeen = ReadBytes $saveFile
-  Launch $exe
+  # The town played earlier stays waiting (it can still be sent back or set aside).
+  try { Launch $exe } catch { $script:proc = $null; throw "melonDS couldn't start: $($_.Exception.Message)" }
 }
 function EmuClose {
   if ($script:proc) { return }
@@ -172,14 +179,54 @@ function StepEmulator {
 }
 
 # ---------- choosing files ----------
-function Owner { $f = New-Object Windows.Forms.Form; $f.TopMost = $true; $f.ShowInTaskbar = $false; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object Drawing.Size(1, 1); $f.Show(); $f.Activate(); return $f }
+# An invisible window to keep each dialog in front (Windows enlarges a 1x1 form, so it's made see-through).
+function Owner { $f = New-Object Windows.Forms.Form; $f.TopMost = $true; $f.ShowInTaskbar = $false; $f.FormBorderStyle = 'None'; $f.Opacity = 0; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object Drawing.Size(1, 1); $f.Show(); $f.Activate(); return $f }
+# The modern folder picker (IFileOpenDialog with FOS_PICKFOLDERS: address bar, typing a path), compiled on first use.
+$folderPicker = @'
+using System; using System.Runtime.InteropServices;
+public static class LeafletFolderPicker {
+  [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FileOpenDialogCls { }
+  [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IFileDialog {
+    [PreserveSig] int Show(IntPtr parent);
+    void SetFileTypes(uint n, IntPtr spec); void SetFileTypeIndex(uint i); void GetFileTypeIndex(out uint i);
+    void Advise(IntPtr sink, out uint cookie); void Unadvise(uint cookie);
+    void SetOptions(uint fos); void GetOptions(out uint fos);
+    void SetDefaultFolder(IntPtr item); void SetFolder(IntPtr item); void GetFolder(out IntPtr item); void GetCurrentSelection(out IntPtr item);
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name); void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+    void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string label); void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+    void GetResult(out IShellItem item);
+  }
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellItem {
+    void BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv); void GetParent(out IShellItem parent);
+    void GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+  }
+  public static string Pick(IntPtr owner, string title) {
+    IFileDialog d = (IFileDialog)new FileOpenDialogCls();
+    uint o; d.GetOptions(out o); d.SetOptions(o | 0x20 | 0x40); d.SetTitle(title);   // FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM
+    if (d.Show(owner) != 0) return "";
+    IShellItem item; d.GetResult(out item); string path; item.GetDisplayName(0x80058000, out path);   // SIGDN_FILESYSPATH
+    return path;
+  }
+}
+'@
 function ChooseFile($title, $filter) {
   $o = Owner
   try { $d = New-Object Windows.Forms.OpenFileDialog; $d.Title = $title; $d.Filter = $filter; if ($d.ShowDialog($o) -eq 'OK') { return $d.FileName } return '' } finally { $o.Close() }
 }
 function ChooseFolder($title) {
   $o = Owner
-  try { $d = New-Object Windows.Forms.FolderBrowserDialog; $d.Description = $title; if ($d.ShowDialog($o) -eq 'OK') { return $d.SelectedPath } return '' } finally { $o.Close() }
+  try {
+    try {
+      if (-not ('LeafletFolderPicker' -as [type])) { Add-Type -TypeDefinition $folderPicker -Language CSharp }
+      return [LeafletFolderPicker]::Pick($o.Handle, $title)
+    } catch {
+      Log "folder picker: $($_.Exception.Message)"   # the old tree dialog still works everywhere
+      $d = New-Object Windows.Forms.FolderBrowserDialog; $d.Description = $title; if ($d.ShowDialog($o) -eq 'OK') { return $d.SelectedPath } return ''
+    }
+  } finally { $o.Close() }
 }
 
 # ---------- melonDS's Wi-Fi settings (wfcsettings.bin next to melonDS.exe) ----------
@@ -208,6 +255,18 @@ function MelonWfc($write) {
 }
 
 # ---------- installing melonDS (step by step, so the window stays responsive) ----------
+function OsArch {
+  try { return [string][Runtime.InteropServices.RuntimeInformation]::OSArchitecture } catch { }
+  $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+  if ($a -eq 'ARM64') { return 'Arm64' } elseif ($a -eq 'AMD64') { return 'X64' } else { return 'X86' }
+}
+# The CPU a Windows program is built for (the PE header's machine field): 0x8664 x64, 0xAA64 ARM64, 0x14C x86.
+function PeMachine($path) {
+  $b = [IO.File]::ReadAllBytes($path)
+  $pe = [BitConverter]::ToInt32($b, 0x3C)
+  if ($pe -lt 0 -or $pe + 6 -gt $b.Length -or $b[$pe] -ne 0x50 -or $b[$pe + 1] -ne 0x45) { return 0 }
+  return [int][BitConverter]::ToUInt16($b, $pe + 4)
+}
 $script:dl = $null
 function MelonInstall {
   if ($script:dl) { return }
@@ -215,8 +274,11 @@ function MelonInstall {
   try {
     $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/melonDS-emu/melonDS/releases/latest' -Headers @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'Leaflet' } -TimeoutSec 30
   } catch { Emit 'LeafletMelonInstall' @{ state = 'error'; error = 'Couldn''t reach GitHub to find melonDS. Check your internet connection.' }; return }
-  $asset = @($release.assets | Where-Object { $_.name -match 'windows' -and $_.name -match '\.zip$' -and $_.name -notmatch 'arm' }) | Select-Object -First 1
-  if (-not $asset) { Emit 'LeafletMelonInstall' @{ state = 'error'; error = 'The latest melonDS release has no Windows download.' }; return }
+  # The build for this PC: ARM64 Windows gets the aarch64/arm64 zip, everything else x86_64/x64 (never the other).
+  $arm = ([string](OsArch)) -eq 'Arm64'
+  $want = if ($arm) { 'windows[-_.]?(aarch64|arm64)' } else { 'windows[-_.]?(x86_64|x64|amd64)' }
+  $asset = @($release.assets | Where-Object { $_.name -match $want -and $_.name -match '\.zip$' }) | Select-Object -First 1
+  if (-not $asset) { Emit 'LeafletMelonInstall' @{ state = 'error'; error = "The latest melonDS release has no Windows download for this PC ($(if ($arm) { 'ARM64' } else { 'x64' }))." }; return }
   # GitHub publishes each file's SHA-256; without it the download couldn't be checked, so it isn't installed.
   if (-not $asset.digest -or -not ([string]$asset.digest).StartsWith('sha256:')) { Emit 'LeafletMelonInstall' @{ state = 'error'; error = 'GitHub didn''t give a checksum for melonDS''s download, so Leaflet won''t install it. Download it from melonDS''s site instead.' }; return }
   try {
@@ -250,6 +312,10 @@ function StepDownload {
     [IO.Compression.ZipFile]::ExtractToDirectory($d.zip, $out)
     $exe = Get-ChildItem -LiteralPath $out -Recurse -Filter 'melonDS.exe' | Select-Object -First 1
     if (-not $exe) { throw 'The download didn''t contain melonDS.exe.' }
+    # Only a build this PC can run (ARM64 Windows also runs x64 programs).
+    $mach = PeMachine $exe.FullName
+    $ok = if (([string](OsArch)) -eq 'Arm64') { $mach -eq 0xAA64 -or $mach -eq 0x8664 } else { $mach -eq 0x8664 -or $mach -eq 0x14C }
+    if (-not $ok) { throw ('That melonDS download is built for a different kind of PC (machine 0x{0:X4}), so it wasn''t installed.' -f $mach) }
     if (MelonRunning) { throw 'melonDS is open. Close it, then install again.' }
     # Copied over any earlier copy, so its settings (melonDS.toml, wfcsettings.bin) stay.
     New-Item -ItemType Directory -Force -Path $melonHome | Out-Null
@@ -303,6 +369,25 @@ function FindSaves($roots) {
 }
 function RemovableDrives { return @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Removable' -and $_.IsReady } | ForEach-Object { $_.RootDirectory.FullName }) }
 
+# Where a broadcast should go: 255.255.255.255 leaves through one adapter only, so also each working IPv4 adapter's own
+# broadcast address (Wi-Fi beside Ethernet, VirtualBox, Hyper-V and VPN adapters).
+function BroadcastTargets([int]$port) {
+  $list = New-Object System.Collections.ArrayList
+  [void]$list.Add((New-Object Net.IPEndPoint([Net.IPAddress]::Broadcast, $port)))
+  try {
+    foreach ($nic in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+      if ($nic.OperationalStatus -ne 'Up' -or $nic.NetworkInterfaceType -eq 'Loopback') { continue }
+      foreach ($u in $nic.GetIPProperties().UnicastAddresses) {
+        if ($u.Address.AddressFamily -ne 'InterNetwork' -or -not $u.IPv4Mask) { continue }
+        $ip = $u.Address.GetAddressBytes(); $mask = $u.IPv4Mask.GetAddressBytes(); $b = New-Object byte[] 4
+        for ($i = 0; $i -lt 4; $i++) { $b[$i] = [byte]($ip[$i] -bor (-bnot $mask[$i] -band 0xFF)) }
+        [void]$list.Add((New-Object Net.IPEndPoint((New-Object Net.IPAddress(,$b)), $port)))
+      }
+    }
+  } catch { }
+  return ,$list.ToArray()
+}
+
 # ---------- installing Leaflet Link over Wi-Fi (the Homebrew Launcher's 3dslink protocol) ----------
 function Discover3DS([int]$seconds) {
   $udp = New-Object System.Net.Sockets.UdpClient
@@ -311,10 +396,10 @@ function Discover3DS([int]$seconds) {
     $udp.Client.Bind((New-Object Net.IPEndPoint([Net.IPAddress]::Any, 17491)))
     $udp.EnableBroadcast = $true; $udp.Client.ReceiveTimeout = 300
     $ping = [Text.Encoding]::ASCII.GetBytes('3dsboot')
-    $everyone = New-Object Net.IPEndPoint([Net.IPAddress]::Broadcast, 17491)
+    $targets = BroadcastTargets 17491
     $until = (Get-Date).AddSeconds($seconds)
     while ((Get-Date) -lt $until) {
-      [void]$udp.Send($ping, $ping.Length, $everyone)
+      foreach ($to in $targets) { try { [void]$udp.Send($ping, $ping.Length, $to) } catch { } }
       try { $from = New-Object Net.IPEndPoint([Net.IPAddress]::Any, 0); $answer = $udp.Receive([ref]$from); if ([Text.Encoding]::ASCII.GetString($answer).StartsWith('boot3ds')) { return $from.Address.ToString() } } catch { }
     }
   } catch { } finally { $udp.Close() }
@@ -371,10 +456,10 @@ function FindLink([double]$seconds) {
   try {
     $udp.EnableBroadcast = $true; $udp.Client.ReceiveTimeout = 200
     $ping = [Text.Encoding]::ASCII.GetBytes('leaflet-link?')
-    $everyone = New-Object Net.IPEndPoint([Net.IPAddress]::Broadcast, 8226)
+    $targets = BroadcastTargets 8226
     $end = (Get-Date).AddSeconds($seconds); $next = Get-Date
     while ((Get-Date) -lt $end) {
-      if ((Get-Date) -ge $next) { [void]$udp.Send($ping, $ping.Length, $everyone); $next = (Get-Date).AddMilliseconds(400) }
+      if ((Get-Date) -ge $next) { foreach ($to in $targets) { try { [void]$udp.Send($ping, $ping.Length, $to) } catch { } }; $next = (Get-Date).AddMilliseconds(400) }
       try {
         $from = New-Object Net.IPEndPoint([Net.IPAddress]::Any, 0)
         $parts = [Text.Encoding]::ASCII.GetString($udp.Receive([ref]$from)).Split(' ')
@@ -474,7 +559,7 @@ function Serve($client) {
       default { Reply $stream 404 '{"error":"Unknown request."}' }
     }
   } catch { Log "request: $($_.Exception.Message)" }
-  finally { try { $stream.Close() } catch { }; $client.Close() }
+  finally { try { $stream.Close() } catch { }; $client.Close(); $script:lastRequest = Get-Date }   # a dialog may have kept this request open a long time
 }
 
 # ---------- start ----------
@@ -523,11 +608,12 @@ try {
     if ($script:later) {
       $job = $script:later; $script:later = $null
       try { if ($job.kind -eq 'find') { FindSaves @($job.roots) } elseif ($job.kind -eq 'findLink') { FindLink 3 } else { Install3DS $job.app $job.address } } catch { Log "later: $($_.Exception.Message)" }
+      $script:lastRequest = Get-Date   # however long the search took, the window gets a minute to collect the answer
     }
     StepDownload
     StepEmulator
     # The Leaflet window polls every second; a minute without it (and nothing under way) means it's closed.
-    if (((Get-Date) - $script:lastRequest).TotalSeconds -gt 60 -and -not $script:proc -and -not $script:dl) { break }
+    if (((Get-Date) - $script:lastRequest).TotalSeconds -gt 60 -and -not $script:proc -and -not $script:dl -and ($events.Count -eq 0 -or ((Get-Date) - $script:lastRequest).TotalSeconds -gt 300)) { break }   # undelivered news waits up to five minutes
   }
 } finally {
   $listener.Stop()

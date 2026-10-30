@@ -8,7 +8,8 @@
 //
 // --card       the cartridge's save (256 KB); the simulated chip writes back to it when a job ends
 // --answer     what the "person" presses when asked to confirm (ask = type y or n in this terminal; delay = A after 4 s)
-// --chip       m45pe takes page writes (0x0A); plain only takes erase + program; eeprom doesn't identify itself
+// --chip       m45pe takes page writes (0x0A); plain only takes erase + program; eeprom doesn't identify itself;
+//              sanyo answers 62 16 00 (no size in its ID, like the LE25FW203T) and takes only erase + program
 // --flaky-reads N   every Nth read flips one bit, like a dirty card contact
 // --stuck-page ADDR the page at ADDR never changes when written (a worn-out chip)
 // --deaf-pages N    the first N page writes are ignored, then writes work (a card that needs a retry)
@@ -32,7 +33,7 @@
 
 static uint8_t flash[LL_SAVE_SIZE];
 static const char *cardPath, *sdDir = "sim-sd";
-static enum { M45PE, PLAIN, EEPROM } kind = M45PE;
+static enum { M45PE, PLAIN, EEPROM, SANYO } kind = M45PE;
 static int flakyEvery, deafLeft, pullAt = -1, writes, slowMs;
 static long stuckPage = -1;
 static bool lowBattery, pulled, wel, consoleMenu;
@@ -68,7 +69,7 @@ bool plat_spi(const uint8_t *cmd, size_t cmdLen, uint8_t *rx, size_t rxLen, cons
   bool busy = plat_ms() < busyUntil;
   if (kind == EEPROM && cmd[0] == 0x9F) { memset(rx, 0xFF, rxLen); return true; }
   switch (cmd[0]) {
-    case 0x9F: { uint8_t id[3] = { 0x20, 0x40, 0x12 }; memcpy(rx, id, rxLen < 3 ? rxLen : 3); return true; }
+    case 0x9F: { uint8_t id[3] = { 0x20, 0x40, 0x12 }, sanyo[3] = { 0x62, 0x16, 0x00 }; memcpy(rx, kind == SANYO ? sanyo : id, rxLen < 3 ? rxLen : 3); return true; }
     case 0x05: if (rxLen) rx[0] = (busy ? 1 : 0) | (wel ? 2 : 0); return true;
     case 0x06: wel = true; return true;
     case 0x04: wel = false; return true;
@@ -139,7 +140,7 @@ int main(int argc, char **argv) {
     const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : "";
     if (!strcmp(a, "--card")) { cardPath = v; i++; }
     else if (!strcmp(a, "--answer")) { snprintf(answer, sizeof answer, "%s", v); i++; }
-    else if (!strcmp(a, "--chip")) { kind = !strcmp(v, "plain") ? PLAIN : !strcmp(v, "eeprom") ? EEPROM : M45PE; i++; }
+    else if (!strcmp(a, "--chip")) { kind = !strcmp(v, "plain") ? PLAIN : !strcmp(v, "eeprom") ? EEPROM : !strcmp(v, "sanyo") ? SANYO : M45PE; i++; }
     else if (!strcmp(a, "--flaky-reads")) { flakyEvery = atoi(v); i++; }
     else if (!strcmp(a, "--stuck-page")) { stuckPage = strtol(v, NULL, 0) & ~0xFFL; i++; }
     else if (!strcmp(a, "--deaf-pages")) { deafLeft = atoi(v); i++; }
@@ -158,7 +159,7 @@ int main(int argc, char **argv) {
   }
   ll_init();
   if (!ll_net_start()) { fprintf(stderr, "couldn't listen on port %d\n", LL_PORT); return 1; }
-  printf("Leaflet Link simulator on http://localhost:%d  (chip %s)\n", LL_PORT, kind == M45PE ? "m45pe" : kind == PLAIN ? "plain" : "eeprom");
+  printf("Leaflet Link simulator on http://localhost:%d  (chip %s)\n", LL_PORT, kind == M45PE ? "m45pe" : kind == PLAIN ? "plain" : kind == SANYO ? "sanyo" : "eeprom");
   fflush(stdout);
   if (!strcmp(answer, "ask") || consoleMenu) fcntl(0, F_SETFL, fcntl(0, F_GETFL, 0) | O_NONBLOCK);
   char cmd[64]; size_t cmdLen = 0;

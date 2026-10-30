@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #ifndef LL_VERSION
-#define LL_VERSION "1.3.1"
+#define LL_VERSION "1.3.2"
 #endif
 #define LL_PROTOCOL 1
 #define LL_PORT 8226
@@ -153,6 +153,8 @@ const LLHealth *ll_health(void);
 bool ll_net_start(void);
 void ll_net_poll(void);
 void ll_net_stop(void);
+// Whether "Find my 3DS" can reach this console (the discovery socket is open).
+bool ll_discovery_on(void);
 
 // Save checks, shared with the tests.
 uint32_t ll_crc32(const uint8_t *d, size_t n);

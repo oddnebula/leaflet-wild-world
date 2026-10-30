@@ -164,7 +164,12 @@ static void chip_detect(void) {
   bool ff = chip.id[0] == 0xFF && chip.id[1] == 0xFF && chip.id[2] == 0xFF, zero = !chip.id[0] && !chip.id[1] && !chip.id[2];
   if (ff || zero) { say(chip.why, sizeof chip.why, "The save chip didn't identify itself, so it isn't the flash chip Wild World uses."); return; }
   chip.answered = true;
-  if (chip.id[2] >= 0x10 && chip.id[2] <= 0x17) chip.size = 1u << chip.id[2];
+  // Most flash chips give their size as a power of two in the third ID byte; a few don't, and are listed here.
+  // 62 16 00: Sanyo LE25FW203T, 2 Mbit (256 KB), found in Wild World cards. Writing still tries each method and checks
+  // every page by reading it back, so a chip that won't take one is handled the same way as before.
+  static const struct { uint8_t id[3]; uint32_t size; } KNOWN[] = { { { 0x62, 0x16, 0x00 }, 256 * 1024 } };
+  for (size_t i = 0; i < sizeof KNOWN / sizeof KNOWN[0]; i++) if (!memcmp(chip.id, KNOWN[i].id, 3)) chip.size = KNOWN[i].size;
+  if (!chip.size && chip.id[2] >= 0x10 && chip.id[2] <= 0x17) chip.size = 1u << chip.id[2];
   if (chip.size != LL_SAVE_SIZE) { say(chip.why, sizeof chip.why, "This save chip holds %u KB; Wild World's holds 256 KB.", (unsigned)(chip.size / 1024)); return; }
   chip.writable = true;
 }
@@ -796,21 +801,26 @@ void ll_answer(bool yes) {
 static int lsock = -1, usock = -1;
 // Discovery: Leaflet (the Mac app, or Leaflet Helper on Windows) broadcasts "leaflet-link?" to UDP port LL_PORT, and
 // Leaflet Link answers "leaflet-link <version> <card code>", so nobody has to type the 3DS's address.
+// If the socket can't be opened yet (Wi-Fi still connecting) or later fails, ll_net_poll tries again every few seconds.
+// No SO_REUSEADDR: a UDP socket doesn't need it, and the 3DS's socket service may refuse it.
+static uint64_t udpRetry;
 static void udp_start(void) {
   if (usock >= 0) return;
+  udpRetry = plat_ms() + 3000;
   usock = socket(AF_INET, SOCK_DGRAM, 0);
   if (usock < 0) return;
-  int one = 1; setsockopt(usock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
   struct sockaddr_in a = { 0 };
   a.sin_family = AF_INET; a.sin_port = htons(LL_PORT); a.sin_addr.s_addr = htonl(INADDR_ANY);
   if (bind(usock, (struct sockaddr *)&a, sizeof a) < 0) { close(usock); usock = -1; return; }
   fcntl(usock, F_SETFL, fcntl(usock, F_GETFL, 0) | O_NONBLOCK);
 }
+bool ll_discovery_on(void) { return usock >= 0; }
 static void udp_poll(void) {
   if (usock < 0) return;
   for (int i = 0; i < 8; i++) {
     char buf[64]; struct sockaddr_in from; socklen_t fl = sizeof from;
     ssize_t n = recvfrom(usock, buf, sizeof buf - 1, 0, (struct sockaddr *)&from, &fl);
+    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) { close(usock); usock = -1; return; }   // reopened soon
     if (n <= 0) return;
     buf[n] = 0;
     if (strncmp(buf, "leaflet-link?", 13)) continue;
@@ -878,10 +888,10 @@ static void send_info(void) {
   char pw[120] = ""; bool power = plat_power_ok(pw, sizeof pw); char pj[160]; json_str(pj, sizeof pj, pw);
   char clk[32]; plat_clock(clk, sizeof clk);
   snprintf(j, sizeof j,
-    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\"],"
+    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\"],\"discovery\":%s,"
     "\"card\":{\"present\":%s,\"ds\":%s,\"title\":%s,\"code\":%s,\"ready\":%s,\"writable\":%s,\"chipId\":\"%02X%02X%02X\",\"size\":%u,\"why\":%s},"
     "\"power\":{\"ok\":%s,\"why\":%s}}",
-    LL_VERSION, LL_PROTOCOL, STATE_NAMES[st.state], clk, card.present ? "true" : "false", card.ds ? "true" : "false", t, c,
+    LL_VERSION, LL_PROTOCOL, STATE_NAMES[st.state], clk, usock >= 0 ? "true" : "false", card.present ? "true" : "false", card.ds ? "true" : "false", t, c,
     ready ? "true" : "false", ready && chip.writable ? "true" : "false", chip.id[0], chip.id[1], chip.id[2], (unsigned)chip.size, w,
     power ? "true" : "false", pj);
   respond_json(200, j);
@@ -1033,6 +1043,7 @@ static void drop(void) { if (conn.fd >= 0) close(conn.fd); conn.fd = -1; }
 
 void ll_net_poll(void) {
   if (lsock < 0) return;
+  if (usock < 0 && plat_ms() >= udpRetry) udp_start();
   udp_poll();
   if (conn.fd < 0) {
     struct sockaddr_in a; socklen_t al = sizeof a;

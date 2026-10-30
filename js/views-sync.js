@@ -223,7 +223,7 @@
       parts.push(h('div', { class: 'btn-row', style: { marginTop: '10px' } },
         h('button', { class: 'btn small', onclick: () => downloadWfc(t.userId) }, '⬇︎ wfcsettings.bin for melonDS'),
         h('button', { class: 'btn small', onclick: () => updateWfcFile(t.userId) }, 'Update my own file…')));
-      parts.push(h('div', { class: 'fine', style: { marginTop: '8px' } }, native ? `Elsewhere, put wfcsettings.bin in melonDS’s folder (${mac ? 'next to melonDS.exe on Windows' : '~/Library/Preferences/melonDS on a Mac'}) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.` : 'Put wfcsettings.bin in melonDS’s folder (next to melonDS.exe on Windows; ~/Library/Preferences/melonDS on a Mac) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.'));
+      parts.push(h('div', { class: 'fine', style: { marginTop: '8px' } }, native ? `Elsewhere, put wfcsettings.bin in melonDS’s folder (${mac ? 'next to melonDS.exe on Windows' : `on this PC it’s ${W.melon && W.melon.path ? W.melon.path : 'next to melonDS.exe'}; ~/Library/Preferences/melonDS on a Mac`}) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.` : 'Put wfcsettings.bin in melonDS’s folder (next to melonDS.exe on Windows; ~/Library/Preferences/melonDS on a Mac) and use its built-in firmware. With your own firmware dump, update that file instead. Play online on one system at a time.'));
     }
     if (W.msg) parts.push(h('div', { class: 'sync-msg' + (W.bad ? ' bad' : ' ok') }, W.msg));
     return [section('🤝 Keep your friend code on an emulator', `From ${src.where}`), h('div', { class: 'card pad sync-wfc' }, parts)];
@@ -347,6 +347,17 @@
 
   // ---------- saves on SD cards (flashcarts such as the R4) ----------
   const F = { busy: false, results: null, searched: [], err: '' };
+  // Windows: Leaflet Helper has stopped (its window was closed from Task Manager, or Start Leaflet ran again with a new
+  // token). Everything waiting on it is cleared and the page says how to get it back.
+  let helperLost = false;
+  window.LeafletHelperLost = () => {
+    helperLost = true; F.busy = false; W.busy = false;
+    if (E.phase === 'starting') E.phase = '';
+    if (['checking', 'downloading', 'installing'].includes(M.state)) { M.state = 'error'; M.error = 'Leaflet Helper stopped before melonDS was installed.'; }
+    if (I.state === 'searching' || I.state === 'sending') { I.state = 'error'; I.error = 'Leaflet Helper stopped.'; }
+    paint();
+  };
+  window.LeafletHelperBack = () => { helperLost = false; paint(); };
   function foundSave(bytes, name, where, modified) {
     const ok = bytes.length >= SIZE && [bytes[0], bytes[0x15FE0]].some(x => x === 0x8A || x === 0xC5 || x === 0x32);
     if (!ok) return null;
@@ -389,7 +400,7 @@
         h('button', { class: 'btn small', onclick: async () => { if (window.Backups) { const rec = await Backups.add(r.bytes, 'manual', { file: r.name }); toast(rec ? 'Backed up' : 'Already in Backups', '📌'); } } }, 'Back up'),
         connected ? h('button', { class: 'btn small leaf', onclick: () => { S.file = r.s; S.fileName = `${r.name} from the SD card`; S.emuStart = null; startReview(1, 'ds'); } }, 'Send to game card') : null) : null));
     return [section('🔎 Saves on an SD card', 'R4 and other flashcarts, or your 3DS’s SD card'), h('div', { class: 'card' + (rows.length ? ' bk-list' : ' pad') },
-      F.results && !rows.length ? h('div', { class: 'pad muted', style: { padding: '14px 16px' } }, `No Wild World saves found${F.searched.length ? ` on ${F.searched.join(', ')}` : ''}. Flashcarts keep the save next to the game, with the same name ending in .sav; TWiLight Menu++ keeps it in a saves folder beside the game.`) : null,
+      F.results && !rows.length && native && !F.searched.length ? h('div', { class: 'pad muted', style: { padding: '14px 16px' } }, `No SD card found. Put the card in ${HERE}, or choose a folder.`) : F.results && !rows.length ? h('div', { class: 'pad muted', style: { padding: '14px 16px' } }, `No Wild World saves found${F.searched.length ? ` on ${F.searched.join(', ')}` : ''}. Flashcarts keep the save next to the game, with the same name ending in .sav; TWiLight Menu++ keeps it in a saves folder beside the game.`) : null,
       rows,
       h('div', { style: { padding: rows.length ? '10px 16px' : 0 } },
         !F.results ? h('p', { class: 'muted', style: { margin: '0 0 10px' } }, native ? `Put your flashcart’s microSD card in ${HERE}. Leaflet looks through every SD card and drive you plug in for Wild World saves, so you can open them, back them up or put them on your game card.` : 'Flashcarts such as the R4 keep each game’s save next to it on the microSD card. Choose the card (or a folder on it) and Leaflet finds every Wild World save there.') : null,
@@ -944,7 +955,9 @@
   }
 
   function body() {
-    const out = [hero(), ...emuCard()];
+    const out = [hero()];
+    if (helperLost && !mac) out.push(h('div', { class: 'callout', style: { marginBottom: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'Leaflet Helper has stopped'), 'Close this window and open Start Leaflet again to use melonDS, SD cards and finding your 3DS. Everything else here still works.')));
+    out.push(...emuCard());
     if (S.phase === 'off' || S.phase === 'connecting' || !S.info) out.push(...installCard(), section('Connect to your 3DS'), connectCard(), ...wfcCard());
     else {
       out.push(statusCard(), updateCard());
@@ -955,7 +968,7 @@
     }
     if (!['sending', 'result', 'review'].includes(S.phase)) out.push(...sdCard());
     out.push(h('div', { class: 'fine sync-fine' }, 'Leaflet Link only reads and writes the save on your own game card. It doesn’t copy the game itself. Writing only happens after you confirm on the 3DS.'));
-    return out;
+    return out.filter(Boolean);   // some cards return null when there's nothing to show
   }
 
   VIEWS.push({
