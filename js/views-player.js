@@ -97,9 +97,9 @@
       row('Recipient IDs', 'Player ID / town ID. For villagers the first byte is the list slot and the second the villager ID.', h('span', { style: { display: 'flex', gap: '6px' } },
         numberInput(() => acc.u16(off + 0xE), v => acc.set16(off + 0xE, v), { max: 0xFFFF, width: 'w-s' }), numberInput(() => acc.u16(off + 0x4), v => acc.set16(off + 0x4, v), { max: 0xFFFF, width: 'w-s' }))),
       row('Name position in greeting', 'Where the recipient’s name is inserted into the first line.', numberInput(() => acc.u8(off + 0xEC), v => acc.set8(off + 0xEC, v), { max: 255, width: 'w-s' })),
-      row('Letter state', 'Whether it’s a draft, unread or read, and whether the present has been unwrapped (LetterView status).', flagBits),
+      row('Letter state', 'Whether it’s a draft, unread or read, and whether the present has been unwrapped.', flagBits),
       row('Letter kind', 'Which template the game wrote it from (0 for letters people write; 0x11 marks one that has been delivered, 0x0C a bottle).', numberInput(() => acc.u8(off + 0xEF), v => acc.set8(off + 0xEF, v), { max: 255, width: 'w-s' })),
-      row('Party types', 'Recipient / sender kind: 1 your future self, 2 a resident, 4 a bottle, 5–6 special senders (LetterParty).', h('span', { style: { display: 'flex', gap: '6px' } },
+      row('Party types', 'Recipient / sender kind: 1 your future self, 2 a resident, 4 a bottle, 5–6 special senders.', h('span', { style: { display: 'flex', gap: '6px' } },
         numberInput(() => acc.u8(off + 0x1A), v => acc.set8(off + 0x1A, v), { max: 255, width: 'w-s' }), numberInput(() => acc.u8(off + 0x32), v => acc.set8(off + 0x32, v), { max: 255, width: 'w-s' }))),
       row('Clear this letter', null, h('button', { class: 'btn small danger', onclick: async () => {
         if (!await confirmSheet('Throw away this letter?', 'The letter and its present will be erased.', 'Throw away')) return;

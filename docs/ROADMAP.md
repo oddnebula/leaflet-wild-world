@@ -92,6 +92,19 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 **Research still open:** the remaining unnamed flags (see RESEARCH.md), Feng Shui scoring, move-out rules, Wendell's
 design pixels, gyroid sound IDs, villager voice pitch, MelodyPlayer, JP/KR saves.
 
+## Phones, updates and the last 2.0 polish (October 29, 2026)
+
+- Leaflet Link serves Leaflet itself, so phones and tablets open it from the 3DS (QR code on the 3DS and in Cartridge
+  Sync); phones hide computer-only parts, say tap/long-press, and get a walk pad in Walk Around Town.
+- One version for everything (js/version.js); the Mac and Windows apps update from GitHub releases, Leaflet updates
+  Leaflet Link when it connects, phones follow Leaflet Link. tools/release.sh builds and checks every part.
+- App data carries over between builds (stable storage, a copy beside the app before updates, export/import).
+- SD cards are searched for saves and ROMs when they're put in (Mac app, Leaflet Helper); Leaflet Link remembers the
+  folders where it found saves, with Look everywhere for a full search.
+- Music is scheduled a little ahead (no stalls), and the Sound Room lists only tracks that play on their own.
+- Still to do before 2.0 ships: test Leaflet Link 2.0.0 on a real 3DS (QR on the lower screen, page load speed, the
+  Sanyo chip), retest Windows (updater, SD scan, app-data copy), and a .cia build with its own updates from GitHub.
+
 ## Fixes from testing on Windows (October 29, 2026)
 - [x] Install melonDS picks the build for the PC's architecture and checks the exe's machine type (it installed the
   ARM64 build on x64 PCs).

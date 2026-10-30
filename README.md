@@ -72,6 +72,19 @@ Download the latest build from [Releases](https://github.com/oddnebula/leaflet-w
   You can also drag a `.sav` file onto the Dock icon.
 - **Windows 10/11:** double-click **Start Leaflet.cmd**. It opens Leaflet in its own Microsoft Edge app window (Edge comes with Windows).
 - **Any computer:** open `index.html` in Chrome, Edge, Safari or Firefox.
+- **Phone or tablet:** open Leaflet Link on your 3DS and scan the QR code on its lower screen (or the one in Cartridge
+  Sync). Leaflet comes straight from the 3DS over your Wi-Fi and connects to it by itself. Parts that need a computer
+  (melonDS, SD card readers, installing Leaflet Link) are hidden, a long press works as a right-click, and Walk Around
+  Town has a walk pad.
+
+**Updates, all together.** Every part of Leaflet carries one version number. The Mac app and the Windows app check
+GitHub once a day (Backups › Leaflet), download a new release, check it against GitHub's SHA-256 and start again.
+When Leaflet connects to an older Leaflet Link it sends the new one (the 3DS asks before installing), and phones get
+the new Leaflet from Leaflet Link. Your settings and backups carry over: they live where every build finds them, a
+copy is kept beside the app before each update, and Backups › Leaflet can export them to move to another computer.
+
+**SD cards, found for you.** Put in a flashcart's microSD card and the Mac app or Leaflet Helper looks through it for
+Wild World saves and your ROM, and offers to open or back up the saves or read game art from the ROM.
 
 Shortcuts: ⌘/Ctrl-O open · ⌘/Ctrl-S save a copy · ⌘/Ctrl-F search every option.
 
@@ -161,6 +174,9 @@ too: "Juniper caught a Rainbow Trout for the first time."
 one in the save. So Leaflet reads the ID from the save itself and gives it to melonDS: one click in the Mac app or
 on Windows, or a ready-made `wfcsettings.bin` (or your own firmware dump, updated). The same friend code and friends then work on the
 emulator and on your DS. Each resident's friend code, and their friends', also show on their page.
+
+**Quicker SD card searches on the 3DS.** Leaflet Link remembers the folders where it found saves and looks there
+first next time; **Look everywhere** (X on the 3DS, or in Cartridge Sync) searches the whole card again.
 
 How it works, how to build it, and its fault tests are in [link/README.md](link/README.md). Leaflet Link is new:
 try it first with a game card whose save you've backed up.

@@ -40,7 +40,7 @@
       card(
         row('For resident', s.str(e + 0xC + 0xC, 8) || 'Nobody', textInput(() => s.str(e + 0xC + 0xC, 8), q => s.setStr(e + 0xC + 0xC, 8, q), 8, { width: 'w-s', check: WWSave.canEncode }), e + 0xC),
         row('Item involved', 'What they want, or are offering.', slot(() => s.u16(e + 8), q => s.set16(e + 8, q), { emptyLabel: 'None' }), e + 8),
-        row('Errand kind and step', 'ErrandRecord kind (22 = none) and step bits.', h('span', { style: { display: 'flex', gap: '6px' } }, numberInput(() => s.u8(e + 0xA), q => s.set8(e + 0xA, q), { max: 255, width: 'w-s' }), numberInput(() => s.u8(e + 0xB), q => s.set8(e + 0xB, q), { max: 255, width: 'w-s' })), e + 0xA),
+        row('Errand kind and step', 'Which favor (22 = none) and how far along it is.', h('span', { style: { display: 'flex', gap: '6px' } }, numberInput(() => s.u8(e + 0xA), q => s.set8(e + 0xA, q), { max: 255, width: 'w-s' }), numberInput(() => s.u8(e + 0xB), q => s.set8(e + 0xB, q), { max: 255, width: 'w-s' })), e + 0xA),
         row('Given on', stamp(s, e), stampEditor(s, e), e)),
     ];
   }

@@ -38,7 +38,7 @@
           section('Delivery round'),
           card(
             row('Last delivery', `${dateText(s, OUTBOX + 0x988)} at ${s.u8(OUTBOX + 0x98B)}:00`, h('span', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, dmy(s, OUTBOX + 0x988, refresh), numberInput(() => s.u8(OUTBOX + 0x98B), v => { s.set8(OUTBOX + 0x98B, v); refresh(); }, { max: 23, width: 'w-s', suffix: ':00' })), OUTBOX + 0x988),
-            row('Outbox flags', 'Outbox state bits (Outbox +0x98C).', numberInput(() => s.u16(OUTBOX + 0x98C), v => s.set16(OUTBOX + 0x98C, v), { max: 0xFFFF, width: 'w-s' }), OUTBOX + 0x98C))];
+            row('Outbox flags', 'State bits the post office keeps for its delivery queue.', numberInput(() => s.u16(OUTBOX + 0x98C), v => s.set16(OUTBOX + 0x98C, v), { max: 0xFFFF, width: 'w-s' }), OUTBOX + 0x98C))];
       } else if (postPick === 'bottle') {
         const used = range(40).filter(i => s.bit(BOTTLE + 0xF4, i)).length;
         editor = [letterEditor(acc, BOTTLE, s, 'Message in a bottle'),
@@ -81,13 +81,13 @@
         section('Board', `${count} post${count === 1 ? '' : 's'} up`),
         card(
           row('Posts on the board', 'How many of the 15 slots the game shows, newest last.', numberInput(() => s.u8(BBS + 0xB7E), v => { s.set8(BBS + 0xB7E, v); refresh(); }, { max: 15, width: 'w-s' }), BBS + 0xB7E),
-          row('Current notice', 'Id of the latest event notice (BbsBoard notice id).', numberInput(() => s.u16(BBS + 0xB7C), v => s.set16(BBS + 0xB7C, v), { max: 0xFFFF, width: 'w-s' }), BBS + 0xB7C),
+          row('Current notice', 'The number of the newest event notice.', numberInput(() => s.u16(BBS + 0xB7C), v => s.set16(BBS + 0xB7C, v), { max: 0xFFFF, width: 'w-s' }), BBS + 0xB7C),
           // TownState +0x68 (0x15EBC): the day TownBbs_UpdateDaily last posted, d / m / y, 0xFF = never; +0x22: posting has started.
           row('Notices last posted', s.u8(0x15EBD) === 0xFF ? 'Never: the board posts everything due when you next play.' : `${dateText(s, 0x15EBC)}. The game posts every notice due since then (up to 31 days) when you next play.`,
             h('span', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, dmy(s, 0x15EBC, refresh), h('button', { class: 'btn small', title: 'Post everything again next time', onclick: () => { s.set8(0x15EBC, 0xFF); s.set8(0x15EBD, 0xFF); s.set8(0x15EBE, 0xFF); sfx.pop(); refresh(); } }, 'Never')), 0x15EBC),
           row('Event notices started', 'Set once the town hall has posted its first event notices. A brand-new town keeps it off until the first day is over.', switchInput(() => s.u8(0x15E76), v => s.set8(0x15E76, v ? 1 : 0)), 0x15E76),
           row('Mark everything read', null, h('button', { class: 'btn small', onclick: () => { for (let k = 0; k < 15; k++) s.set8(BBS + k * POST + 0xC3, s.u8(BBS + k * POST + 0xC3) | 15); sfx.pop(); refresh(); } }, 'All read')),
-          row('Notices already posted', 'Pelly’s notices and the town slogans the game has put up, one bit each (TownState).', h('span', { class: 'muted' }, 'below'))),
+          row('Notices already posted', 'Pelly’s notices and the town slogans the game has put up, one bit each.', h('span', { class: 'muted' }, 'below'))),
         h('div', { class: 'card' }, window.BitBytes(s, 0x15E60, 10, o => 'notices ' + (o - 0x15E60) * 8 + '+'), window.BitBytes(s, 0x15E6A, 11, o => 'slogans ' + (o - 0x15E6A) * 8 + '+')),
         section('Posts'),
         h('div', { class: 'bbs-grid' }, posts),
@@ -228,8 +228,8 @@
         section('🔭 Look up', 'Your town’s night sky'), skyDome(s, skyPick),
         section('Constellations', `${range(16).filter(k => (used >> k) & 1).length} of 16 slots used`),
         card(row('Constellation', null, selectInput(opts, () => skyPick, v => { skyPick = v; refresh(); }, { width: 'w-l' })),
-          skyPick < 16 ? row('Slot in use', 'Off frees the slot (ConstellationRecords used mask).', switchInput(() => (s.u16(SKY + 0x460) >> skyPick) & 1, v => { s.set16(SKY + 0x460, (s.u16(SKY + 0x460) & ~(1 << skyPick)) | (v ? 1 << skyPick : 0)); refresh(); }), SKY + 0x460) : null,
-          skyPick < 16 ? row('Not seen yet', 'New constellations Celeste hasn’t shown you (new mask).', switchInput(() => (fresh >> skyPick) & 1, v => s.set16(SKY + 0x462, (s.u16(SKY + 0x462) & ~(1 << skyPick)) | (v ? 1 << skyPick : 0))), SKY + 0x462) : null),
+          skyPick < 16 ? row('Slot in use', 'Off frees the slot for a new constellation.', switchInput(() => (s.u16(SKY + 0x460) >> skyPick) & 1, v => { s.set16(SKY + 0x460, (s.u16(SKY + 0x460) & ~(1 << skyPick)) | (v ? 1 << skyPick : 0)); refresh(); }), SKY + 0x460) : null,
+          skyPick < 16 ? row('Not seen yet', 'New constellations Celeste hasn’t shown you yet.', switchInput(() => (fresh >> skyPick) & 1, v => s.set16(SKY + 0x462, (s.u16(SKY + 0x462) & ~(1 << skyPick)) | (v ? 1 << skyPick : 0))), SKY + 0x462) : null),
         ...skyEditor(s, o, refresh, skyPick < 16 && !((used >> skyPick) & 1), () => { s.set16(SKY + 0x460, s.u16(SKY + 0x460) | (1 << skyPick)); s.set16(SKY + 0x462, s.u16(SKY + 0x462) | (1 << skyPick)); }),
       ];
     },

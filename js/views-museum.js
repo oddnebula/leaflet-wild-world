@@ -227,7 +227,7 @@
     ['Golden Can', 0x1379, 'Keep a perfect town rating for 15 days in a row. Pelly or Phyllis gives it at the town hall.', 32],
     ['Golden Slingshot', 0x137B, 'Shoot down 14 balloon presents. The next balloon is golden.', 48],
     ['Golden Shovel', 0x136A, 'Bury a regular shovel, then dig it up a day later.', 39],
-    ['Golden Axe', 0x1373, 'Finish the trading chain: Red Turnip → Wendell → Sahara → … → give Pascal a scallop.', null],
+    ['Golden Axe', 0x1373, 'A trading chain: give a red turnip to Wendell (for a turban), the turban to Saharah (for a massage chair), the chair to Tortimer (for a scallop), and the scallop to Pascal.', null],
   ];
   function townHas(s, id) {
     const spots = [];

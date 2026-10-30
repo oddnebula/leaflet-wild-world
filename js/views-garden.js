@@ -50,23 +50,23 @@
         e.n++; if (e.where.length < 3) e.where.push(String.fromCharCode(65 + (y >> 4)) + '-' + ((x >> 4) + 1)); pairs.set(key, e);
       }
     }
-    const resultChips = res => res.map(([w, id]) => { const c = colorOfId(kind, id); return h('span', { class: 'fl-res' + (grown.has(id - K.base + 1) ? '' : ' new'), title: grown.has(id - K.base + 1) ? 'You already grow this colour' : 'A colour your town doesn’t have yet' }, dot(c), c, ' ', h('b', null, w + '%')); });
+    const resultChips = res => res.map(([w, id]) => { const c = colorOfId(kind, id); return h('span', { class: 'fl-res' + (grown.has(id - K.base + 1) ? '' : ' new'), title: grown.has(id - K.base + 1) ? 'You already grow this color' : 'A color your town doesn’t have yet' }, dot(c), c, ' ', h('b', null, w + '%')); });
     const tabs = h('div', { class: 'tabs' }, KINDS.map((k, i) => h('button', { class: 'tab' + (i === kind ? ' on' : ''), onclick: () => { kind = i; target = null; sfx.click(); refresh(); } }, k.em, ' ', k.name)));
     const goal = h('div', { class: 'fl-goals' }, K.colors.map((c, ci) => h('button', { class: 'fl-goal' + (target === ci ? ' on' : '') + (grown.has(ci + 1) ? ' have' : ''), onclick: () => { target = target === ci ? null : ci; sfx.pop(); refresh(); } },
       dot(c), h('b', null, c), h('span', { class: 'muted' }, grown.has(ci + 1) ? 'in town' : ways[ci].length ? 'Hybrid' : 'Plant it'))));
     const best = target === null ? null : ways[target];
     return [
       tabs,
-      section(`${K.em} Which colour do you want?`, 'Pick one to see the pairs that can make it'), h('div', { class: 'card pad' }, goal,
+      section(`${K.em} Which color do you want?`, 'Pick one to see the pairs that can make it'), h('div', { class: 'card pad' }, goal,
         best ? (best.length ? h('div', { class: 'fl-ways' }, best.slice(0, 8).map(wy => h('div', { class: 'fl-way' }, dot(K.colors[wy.lo - 1]), K.colors[wy.lo - 1], ' + ', dot(K.colors[wy.hi - 1]), K.colors[wy.hi - 1],
           h('span', { class: 'sp' }), h('b', null, wy.w + '%'), h('span', { class: 'muted' }, ' chance it’s ' + K.colors[target].toLowerCase()))))
-          : h('div', { class: 'muted fl-ways' }, `${K.colors[target]} ${K.name.toLowerCase()} don’t come from crossing two other colours: plant them (Nook sells the bags), or breed two of them for more.`)) : null),
+          : h('div', { class: 'muted fl-ways' }, `${K.colors[target]} ${K.name.toLowerCase()} don’t come from crossing two other colors: plant them (Nook sells the bags), or breed two of them for more.`)) : null),
       section('🌱 Side by side in your town', pairs.size ? `${pairs.size} kind${pairs.size === 1 ? '' : 's'} of pair` : `No ${K.name.toLowerCase()} next to each other yet`),
       h('div', { class: 'card pad' }, pairs.size ? h('div', { class: 'fl-pairs' }, [...pairs.values()].sort((a, b) => b.n - a.n).map(p => h('div', { class: 'fl-pair' },
         h('div', null, dot(K.colors[p.lo - 1]), K.colors[p.lo - 1], ' + ', dot(K.colors[p.hi - 1]), K.colors[p.hi - 1], h('span', { class: 'muted' }, ` · ${p.n} pair${p.n === 1 ? '' : 's'} (${p.where.join(', ')})`)),
         h('div', { class: 'fl-resrow' }, resultChips(results(kind, p.lo, p.hi))))))
         : h('div', { class: 'muted' }, `Plant two ${K.name.toLowerCase()} next to each other (diagonals count too) with an empty spot beside them.`)),
-      section(`📋 Every pair of ${K.name.toLowerCase()}`, 'The game’s own odds for the new flower’s colour'),
+      section(`📋 Every pair of ${K.name.toLowerCase()}`, 'The game’s own odds for the new flower’s color'),
       h('div', { class: 'card pad fl-table-wrap' }, h('table', { class: 'fl-table' },
         h('tr', null, h('th'), K.colors.map(c => h('th', null, dot(c), h('span', null, c)))),
         K.colors.map((a, ai) => h('tr', null, h('th', null, dot(a), h('span', null, a)), K.colors.map((b, bi) => bi < ai ? h('td', { class: 'dim' }) : h('td', null, results(kind, ai + 1, bi + 1).map(([w, id]) => h('div', { class: 'fl-cell' }, dot(colorOfId(kind, id)), w + '%')))))))),
@@ -76,7 +76,7 @@
 
   VIEWS.push({
     id: 'garden', group: 'Town', icon: '🌹', title: () => 'Flower Breeding', sub: () => 'The game’s own hybrid odds, and the pairs in your town',
-    tips: ['Two flowers of the same kind growing side by side (diagonals count) can grow a new flower in an empty spot next to them.', 'Watered flowers count as their plain colour here.'],
+    tips: ['Two flowers of the same kind growing side by side (diagonals count) can grow a new flower in an empty spot next to them.', 'Watered flowers count as their plain color here.'],
     render(s, { refresh }) { return render(s, refresh); },
   });
 })();

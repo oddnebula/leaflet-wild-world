@@ -327,7 +327,7 @@
       if (!sky.on) {
         const ax = Math.floor(me.x + Math.sin(me.yaw) * 1.1), az = Math.floor(me.z + Math.cos(me.yaw) * 1.1);
         const there = ax >= 0 && az >= 0 && ax < N && az < N ? T.what[az * N + ax] : '';
-        info.textContent = `${clock} · ${there ? `In front of you: ${there}` : 'Arrow keys or WASD to walk · drag to look around'}`;
+        info.textContent = `${clock} · ${there ? `In front of you: ${there}` : (window.LEAFLET_PHONE ? 'Walk with the pad · drag to look around' : 'Arrow keys or WASD to walk · drag to look around')}`;
       } else info.textContent = `${clock} · Drag to turn the town · scroll to zoom`;
       return M;
     }
@@ -392,17 +392,24 @@
     const SEASON_WORD = { spring: 'Spring', bloom: 'Cherry blossoms', summer: 'Summer', fall: 'Autumn', winter: 'Winter', snow: 'Snow on the ground' };
     return h('div', { class: 'card pad town3d-card' },
       h('div', { class: 'town3d-bar' }, info, h('span', { class: 'spacer' }), mode),
-      canvas,
+      // Phones: a walk pad over the corner of the view (each button holds an arrow key down while pressed).
+      window.LEAFLET_PHONE ? h('div', { class: 'town3d-stage' }, canvas, h('div', { class: 'town3d-pad' }, [['arrowup', '▲', 'up'], ['arrowleft', '◀', 'left'], ['arrowdown', '▼', 'down'], ['arrowright', '▶', 'right']].map(([k, label, cls]) => {
+        const b = h('button', { class: 'town3d-padbtn ' + cls, 'aria-label': `Walk ${cls === 'up' ? 'forward' : cls === 'down' ? 'back' : cls}` }, label);
+        const up = () => keys.delete(k);
+        b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); keys.add(k); kick(); });
+        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+        return b;
+      }))) : canvas,
       h('div', { class: 'town3d-bar town3d-tools' }, hourSel, wxSel, music, photo, art, h('span', { class: 'spacer' }),
         h('span', { class: 'muted', style: { fontSize: '12px' } }, SEASON_WORD[season])),
       h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, game
-        ? 'Drawn with the game’s own acres, trees, flowers and buildings from your ROM, laid out flat to walk on (you walk on the acres’ own ground and can’t wade into water), with trees on the game’s own calendar of leaf colours and blossom, lit by the game clock with the weather the game rolled for today. Fruit on trees isn’t shown yet.'
+        ? 'Drawn with the game’s own acres, trees, flowers and buildings from your ROM, laid out flat to walk on (you walk on the acres’ own ground and can’t wade into water), with trees on the game’s own calendar of leaf colors and blossom, lit by the game clock with the weather the game rolled for today. Fruit on trees isn’t shown yet.'
         : 'Every tree, flower, rock and building is where your save has it, lit by the game clock with the weather the game rolled for today. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
   }
 
   VIEWS.push({
     id: 'town3d', group: 'Town', icon: '🚶', title: () => 'Walk Around Town', sub: s => `${s.str(4, 8)} in 3D`,
-    tips: ['Click the town, then use the arrow keys or WASD to walk. Drag to look around.', 'Bird’s-eye shows the whole town; drag to turn it and scroll to zoom.', 'The light follows the game clock and the weather is the one the game rolled for today. Pick another hour or weather to see the town differently, then 📷 for a postcard.'],
+    tips: [window.LEAFLET_PHONE ? 'Walk with the arrow pad in the corner. Drag to look around.' : 'Click the town, then use the arrow keys or WASD to walk. Drag to look around.', 'Bird’s-eye shows the whole town; drag to turn it and scroll to zoom.', 'The light follows the game clock and the weather is the one the game rolled for today. Pick another hour or weather to see the town differently, then 📷 for a postcard.'],
     render(s) { return [townView(s)]; },
   });
 })();

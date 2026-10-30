@@ -115,7 +115,7 @@
       const notes = [];
       if (!save.copyStatus[0] || !save.copyStatus[1]) notes.push('One of the two backup copies inside the file was damaged, so I used the healthy one.');
       if (!save.lettersValid) notes.push('Your town hall mailbox checksum looked off. Saving will repair it.');
-      say(`Welcome to ${town}! I found everything I need. ${notes.join(' ')} Pick anything from the sidebar to start editing!`);
+      say(`${town.trim() ? `Welcome to ${town}!` : 'Welcome to town!'} I found everything I need. ${notes.join(' ')} Pick anything from the ${PHONE ? 'menu' : 'sidebar'} to start editing!`);
     } catch (e) {
       sfx.error();
       say(e.message);
