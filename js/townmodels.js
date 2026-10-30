@@ -63,16 +63,18 @@
   };
 
   // ---------- the time of year ----------
-  // Leaf colours run through 22 palettes over the year: spring green, the April blossom, summer greens, yellowing,
-  // autumn reds, bare browns and winter. The game's exact day-by-day table isn't decoded yet, so this follows the date.
-  function leafIndex(d) {
-    const doy = (d.getMonth() + 1) * 100 + d.getDate();
-    if (doy < 225) return 20;
-    if (doy < 301) return 21;
-    const T = [[301, 0], [401, 1], [406, 2], [411, 3], [501, 4], [601, 5], [701, 6], [801, 7], [816, 8], [901, 9], [916, 10], [1001, 11], [1011, 12], [1016, 13], [1021, 14], [1101, 15], [1111, 16], [1121, 17], [1201, 18], [1211, 19], [1225, 20]];
-    let k = 0; for (const [from, i] of T) if (doy >= from) k = i;
-    return k;
-  }
+  // The game splits the year into 23 tree stages (func_0209cc98: the first stage whose (month, day) bound the date is on
+  // or before, data_020d06a0). Each stage picks the tree models (winter, blossom or summer, data_ov003_0222f810: blossom
+  // only for broadleaf trees from April 1 to 8), the leaf palette in that variant's palette set (tree_set A/B/C, palette
+  // number from data_ov003_0222f758; the trunk is palette 22) and the weeds' palette (data_ov003_0222f6a0).
+  const STAGE_ENDS = [0x0203, 0x0211, 0x0218, 0x031F, 0x0403, 0x0408, 0x0716, 0x090F, 0x091E, 0x0A04, 0x0A0A, 0x0A10,
+    0x0A14, 0x0A19, 0x0A1E, 0x0B02, 0x0B09, 0x0B0D, 0x0B13, 0x0B19, 0x0C01, 0x0C0A, 0x0C1F];
+  function treeStage(d) { const v = ((d.getMonth() + 1) << 8) | d.getDate(); const i = STAGE_ENDS.findIndex(e => v <= e); return i < 0 ? 22 : i; }
+  // Per stage: the variant for broadleaf trees and for the rest (0 winter, 1 blossom, 2 summer).
+  const VARIANT = st => (st <= 2 || st === 22 ? [0, 0] : st === 4 || st === 5 ? [1, 2] : [2, 2]);
+  const LEAF = [19, 20, 21, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  const WEED = [9, 9, 9, 0, 1, 1, 1, 2, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 8, 8, 9];
+  const SFX = ['w', 'f', 's'];
 
   // Flowers: model, and the palette index of each colour in item order (fg/flower/{kind}/{kind}_palette.nsbtx).
   const FLOWERS = [['tulip', 0x00, 6], ['pansy', 0x06, 6], ['cosmos', 0x0C, 6], ['rose', 0x12, 8]];
@@ -91,7 +93,7 @@
     const G = ['baby', '01', '02', '03', '04', '04'];
     if (id >= 0x25 && id <= 0x2A) return { kind: 'tree', size: G[id - 0x25] };
     if (id >= 0x2B && id <= 0x2E) return { kind: 'tree', stump: id - 0x2B + 1 };
-    if (id >= 0x2F && id <= 0x5B) { const st = (id - 0x2F) % 8; return { kind: 'tree', size: ['baby', '01', '02', '03', '04', '04', '04', '04'][st], fruit: st === 4 }; }
+    if (id >= 0x2F && id <= 0x5B) { const st = (id - 0x2F) % 8; return { kind: 'tree', size: ['baby', '01', '02', '03', '04', '04', '04', '04'][st] }; }
     if (id >= 0x5C && id <= 0x60) return { kind: 'cedar', size: ['baby', '01', '02', '03', '04'][id - 0x5C] };
     if (id >= 0x61 && id <= 0x64) return { kind: 'cedar', stump: id - 0x61 + 1 };
     if (id === 0xC7) return { kind: 'palm', size: 'dead' };
@@ -117,12 +119,36 @@
     const grass = s.u8(GRASS), pattern = Math.min(2, grass & 3), gseason = Math.min(11, grass >> 2);
     const gpath = `bg/ct${pattern}/grd_set${pattern}${'abcdefghijkl'[gseason]}.nsbtx`, GT = texSet(gpath);
     // Ground.
-    const unbend = v => { const yy = v[1] + 0.62, th = Math.atan2(v[2], yy), d = Math.hypot(v[2], yy); return [v[0], d - 32, 32 * th]; };
+    // The bend is very nearly a circle of radius 32; what's left (the ground dips up to about 0.3 units more toward an
+    // acre's south edge, the same in every acre) is measured once and added back, by distance along the acre.
+    const SAG = [0, 0, 0.01, 0.02, 0.03, 0.04, 0.06, 0.1, 0.15, 0.19, 0.21, 0.22, 0.24, 0.27, 0.3, 0.31];
+    const sag = zf => { const r = Math.max(0, Math.min(15, zf / 2 - 0.5)), i = Math.floor(r), f = r - i; return SAG[i] + (SAG[Math.min(15, i + 1)] - SAG[i]) * f; };
+    const unbend = v => { const yy = v[1] + 0.62, th = Math.atan2(v[2], yy), d = Math.hypot(v[2], yy), zf = 32 * th; return [v[0], d - 32 + sag(zf), zf]; };
+    // Each map spot's ground height and whether it's water (river, pond, sea), found by dropping a point onto the acre's
+    // own triangles; the walk follows this ground instead of Leaflet's acre shapes.
+    const height = new Float32Array(N * N).fill(-1e9), water = new Uint8Array(N * N), wet = new Set();
     for (let ay = 0; ay < 6; ay++) for (let ax = 0; ax < 6; ax++) {
       const id = s.u8(ACRES + ay * 6 + ax), m = model(`bg/a${id >> 4}/${hex4(id)}.arc`); if (!m || !GT) continue;
-      const g = M3().modelGroups(m.M, null, mat => tex(GT, gpath, mat.tex, mat.pal in GT.pals ? mat.pal : first(GT.pals))).groups;
-      B.add(g, v => { const u = unbend(v); return [(ax - 1) * 16 + u[0] / 2, u[1] / 2, (ay - 1) * 16 + u[2] / 2]; });
+      const g = M3().modelGroups(m.M, null, mat => { const tx = tex(GT, gpath, mat.tex, mat.pal in GT.pals ? mat.pal : first(GT.pals)); if (tx && /riv|sea|was|wav|awa/.test(mat.tex)) wet.add(tx); return tx; }).groups;
+      const xf = v => { const u = unbend(v); return [(ax - 1) * 16 + u[0] / 2, u[1] / 2, (ay - 1) * 16 + u[2] / 2]; };
+      B.add(g, xf);
+      if (ax < 1 || ay < 1 || ax > 4 || ay > 4) continue;
+      for (const gr of g) {
+        const isWet = wet.has(gr.tex), P = gr.verts.map(xf);
+        for (let i = 0; i + 2 < P.length; i += 3) {
+          const [a, b, c] = [P[i], P[i + 1], P[i + 2]];
+          const x0 = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0]))), x1 = Math.min(N - 1, Math.floor(Math.max(a[0], b[0], c[0]))), z0 = Math.max(0, Math.floor(Math.min(a[2], b[2], c[2]))), z1 = Math.min(N - 1, Math.floor(Math.max(a[2], b[2], c[2])));
+          const den = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]); if (Math.abs(den) < 1e-9) continue;
+          for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+            const px = x + 0.5, pz = z + 0.5, l1 = ((b[2] - c[2]) * (px - c[0]) + (c[0] - b[0]) * (pz - c[2])) / den, l2 = ((c[2] - a[2]) * (px - c[0]) + (a[0] - c[0]) * (pz - c[2])) / den, l3 = 1 - l1 - l2;
+            if (l1 < -1e-4 || l2 < -1e-4 || l3 < -1e-4) continue;
+            const hy = l1 * a[1] + l2 * b[1] + l3 * c[1], k = z * N + x;
+            if (hy > height[k] + 0.01) { height[k] = hy; water[k] = isWet ? 1 : 0; }
+          }
+        }
+      }
     }
+    for (let k = 0; k < N * N; k++) if (height[k] < -1e8) height[k] = 0;
     // A model with its own texture file (or textures inside it), optionally recoloured from a palette file.
     const put = (mpath, tpath, xf, palFor) => {
       const m = model(mpath); if (!m) return false;
@@ -137,17 +163,17 @@
       return true;
     };
     // Trees, flowers, weeds, rocks.
-    const leafSet = texSet(`fg/tree/tree_pal/tree_set${'ABC'[pattern]}.nsbtx`), leaf = String(leafIndex(date)).padStart(2, '0');
-    const leafPal = leafSet ? { T: leafSet, key: `set${pattern}` } : null;
+    const stage = treeStage(date), [broad, other] = VARIANT(stage), setPath = `fg/tree/tree_pal/tree_set${'ABC'[broad]}.nsbtx`, leafSet = texSet(setPath);
+    const leaf = String(LEAF[stage]).padStart(2, '0'), leafPal = leafSet ? { T: leafSet, key: setPath } : null;
     const idx = (x, y) => ((y >> 4) * 4 + (x >> 4)) * 256 + (y & 15) * 16 + (x & 15);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const id = s.u16(MAP + idx(x, y) * 2), cx = x + 0.5, cz = y + 0.5, xf = at(cx, cz);
       const t = tree(id);
       if (t) {
         if (t.stump) { const k = t.kind === 'tree' ? 'tree' : t.kind; put(`fg/tree/stamp/${k}0${Math.min(4, t.stump)}_stamp.nsbmd`, `fg/tree/stamp/${k}0${Math.min(4, t.stump)}_stamp.nsbtx`, xf); continue; }
-        const sfx = snowy ? 'w' : t.fruit && t.kind === 'tree' ? 'f' : 's', name = `${t.kind}_${t.size}${sfx}`;
+        const name = `${t.kind}_${t.size}${SFX[t.kind === 'tree' ? broad : other]}`;
         put(`fg/tree/${t.kind}_mdl/${name}.nsbmd`, `fg/tree/${t.kind}_tex/${name}.nsbtx`, xf,
-          t.kind === 'tree' && leafPal ? mat => (/leaf/.test(mat.tex) && t.size !== 'baby' && t.size !== 'dead' ? { name: `tree_leaf${leaf}_pl`, palT: leafPal } : null) : null);
+          t.kind === 'tree' && leafPal && t.size !== 'baby' && t.size !== 'dead' ? mat => (/leaf/.test(mat.tex) ? { name: `tree_leaf${leaf}_pl`, palT: leafPal } : /trunk/.test(mat.tex) ? { name: 'tree_trunk_pl', palT: leafPal } : null) : null);
         continue;
       }
       const f = flower(id);
@@ -159,7 +185,7 @@
       }
       if (id === 0x1D || id === 0x1E) { put('fg/flower/tanpopo.nsbmd', null, xf, null); continue; }
       if (id === 0x1F || id === 0x20) { put('fg/grass/clover.nsbmd', null, xf, null); continue; }
-      if (id >= 0x21 && id <= 0x24) { const gp = texSet('fg/grass/grass_palette.nsbtx'); put(`fg/grass/grass${'ABCD'[id - 0x21]}.nsbmd`, null, xf, gp ? () => ({ name: `grass0${Math.min(9, gseason)}_pl`, palT: { T: gp, key: 'grass' } }) : null); continue; }
+      if (id >= 0x21 && id <= 0x24) { const gp = texSet('fg/grass/grass_palette.nsbtx'); put(`fg/grass/grass${'ABCD'[id - 0x21]}.nsbmd`, null, xf, gp ? () => ({ name: `grass0${WEED[stage]}_pl`, palT: { T: gp, key: 'grass' } }) : null); continue; }
       if ((id >= 0xE3 && id <= 0xEC) || id === 0xE2) { put(`fg/stone/obj_stn${sw}.nsbmd`, null, xf, null); continue; }
     }
     // Buildings: centred on the spots they cover.
@@ -197,8 +223,8 @@
         if (!place(`str/arc/${n}/str${n}${sw}.arc`, `str/arc/${n}/str${n}${sw}.nsbtx`) && sw === 's') place(`str/arc/${n}/str${n}w.arc`, `str/arc/${n}/str${n}w.nsbtx`);
       }
     }
-    return B.list();
+    return { batches: B.list(), height, water };
   }
 
-  window.TownModels = { available, build, leafIndex };
+  window.TownModels = { available, build, treeStage };
 })();

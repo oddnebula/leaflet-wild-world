@@ -64,8 +64,10 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 - [x] Photo mode: postcards from the 3D town, house rooms, neighbors' rooms and Celeste's sky.
 - [x] The town with the game's own models from the player's ROM: acre ground (bg/a*, unbent from the rolling world) in
   the save's ground season, trees, flowers, weeds and rocks (fg/), every building (str/), neighbours' own houses (their
-  house byte from the main code) and the gate. Still approximate: leaf colours by date (the game's table isn't decoded),
-  fruit colours, and walking collisions (from Leaflet's acre shapes, not the acre's tile table).
+  house byte from the main code) and the gate. Trees follow the game's 23 tree stages (leaf palette, blossom, winter);
+  walking follows each acre's own ground heights and water.
+- [ ] Fruit on trees in the game-model town (drawn separately from the tree models; still to find).
+- [ ] Main Street (Nook's, Able Sisters, museum) inside, with the bg/a256–a258 interior models.
 
 **Chunk B: for planners and completionists**
 - [ ] Town planner: paint trees, flowers and paths over the map with each acre's perfect-town status updating live.

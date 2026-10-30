@@ -97,3 +97,10 @@ Scanned every call to the flag functions in main and all overlays, including C++
   house textures `/str/npcHsTex/%c/house_%c%d%c.nsbtx` from the style bytes at 0x1592C (v/5 → A–E, v%5).
 - Trees: `fg/tree/{tree,cedar,palm}_mdl/{kind}_{baby,01–04,dead}{s,f,w}`; leaves take one of 22 palettes in
   `tree_pal/tree_set{A,B,C}` (per grass pattern). Flower colours from `fg/flower/{kind}/{kind}_palette.nsbtx`.
+- Tree stages: func_0209cc98 maps (month, day) to 23 stages by the end dates in data_020d06a0 (Feb 3, 17, 24, Mar 31,
+  Apr 3, 8, Jul 22, Sep 15, 30, Oct 4, 10, 16, 20, 25, 30, Nov 2, 9, 13, 19, 25, Dec 1, 10, 31). Per stage
+  data_ov003_0222f810 picks the model variant (0 winter, 1 blossom, 2 summer; blossom for broadleaf trees on Apr 1–8),
+  which is also the palette set (tree_set A/B/C); data_ov003_0222f758 gives the leaf palette number
+  (19, 20, 21, 0, 1, …, 19) and 22 for the trunk; data_ov003_0222f6a0 the weeds' palette (grass00–09).
+- After unbending, the acres still dip a little toward the south edge, up to 0.31 model units, identically in every
+  acre; Leaflet adds that measured curve back.

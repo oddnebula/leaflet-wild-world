@@ -143,6 +143,7 @@
     B.quad([N, -0.02, 0], [N, -0.02, N], [N + 40, -0.02, N], [N + 40, -0.02, 0], skirt);
     B.quad([-40, -0.35, N], [-40, -0.35, N + 60], [N + 40, -0.35, N + 60], [N + 40, -0.35, N], hexc('#3d86c4'));
 
+    const blocks = new Uint8Array(N * N);   // spots an object stands on (trees, rocks, buildings), whatever the ground
     // Everything on the map.
     const ids = new Uint16Array(N * N);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) ids[y * N + x] = s.u16(MAP + idx(x, y) * 2);
@@ -152,7 +153,7 @@
       if (cat === 'Empty' || cat === 'Occupied Space') continue;
       what[y * N + x] = name;
       if (/Trees|Palm Trees/.test(cat)) {
-        solid[y * N + x] = 1;
+        solid[y * N + x] = blocks[y * N + x] = 1;
         const small = /Sapling|Small|Young/.test(name) ? 0.45 : /Medium/.test(name) ? 0.7 : 1, palm = cat === 'Palm Trees' || /Palm|Coconut/.test(name), cedar = /Cedar/.test(name);
         B.box(cx - 0.09, base, cz - 0.09, cx + 0.09, base + 1.1 * small, cz + 0.09, hexc('#8a5a32'));
         // Leaves by season: orange and red in autumn, pink in the April blossom, darker in winter with snow on top.
@@ -168,9 +169,9 @@
         B.box(cx - 0.03, base, cz - 0.03, cx + 0.03, base + 0.22, cz + 0.03, hexc('#4f9a3f'));
         B.blob(cx, base + 0.27, cz, 0.15, 0.08, hexc(col, cat === 'Parched Flowers' ? 0.65 : 1));
       } else if (cat === 'Weeds') B.blob(cx, base + 0.08, cz, 0.22, 0.16, hexc('#8fcf5a'));
-      else if (/Rocks/.test(cat)) { solid[y * N + x] = 1; B.blob(cx, base + 0.25, cz, 0.42, 0.4, hexc('#9a9a9a')); }
+      else if (/Rocks/.test(cat)) { solid[y * N + x] = blocks[y * N + x] = 1; B.blob(cx, base + 0.25, cz, 0.42, 0.4, hexc('#9a9a9a')); }
       else if (cat === 'Special Stumps') B.box(cx - 0.25, base, cz - 0.25, cx + 0.25, base + 0.3, cz + 0.25, hexc('#8a5a32'));
-      else if (cat === 'Snowmen') { B.blob(cx, base + 0.3, cz, 0.35, 0.3, hexc('#f8f8ff')); B.blob(cx, base + 0.85, cz, 0.25, 0.22, hexc('#f8f8ff')); solid[y * N + x] = 1; }
+      else if (cat === 'Snowmen') { B.blob(cx, base + 0.3, cz, 0.35, 0.3, hexc('#f8f8ff')); B.blob(cx, base + 0.85, cz, 0.25, 0.22, hexc('#f8f8ff')); solid[y * N + x] = blocks[y * N + x] = 1; }
       else if (cat === 'Buildings' && !seen[y * N + x]) {
         // The building's footprint: its own spot and the occupied spots joined to it.
         const q = [[x, y]], foot = []; seen[y * N + x] = 1;
@@ -183,7 +184,7 @@
         }
         const xs = foot.map(f => f[0]), ys = foot.map(f => f[1]);
         let x0 = Math.min(...xs), x1 = Math.max(...xs) + 1, z0 = Math.min(...ys), z1 = Math.max(...ys) + 1;
-        foot.forEach(([fx, fy]) => { solid[fy * N + fx] = 1; what[fy * N + fx] = name; });
+        foot.forEach(([fx, fy]) => { solid[fy * N + fx] = blocks[fy * N + fx] = 1; what[fy * N + fx] = name; });
         buildings.push({ name, id, x0, z0, x1, z1 });
         let [, wallC, roofC, hgt] = BUILD.find(([re]) => re.test(name)) || [0, '#e8d8b8', '#8a6a4a', 1.6];
         if (/Neighbor House #(\d)/.test(name)) { const v = +RegExp.$1 - 1; wallC = NEIGHBOR_COLORS[v % 8]; roofC = ['#c8553d', '#4f7fd6', '#3f8f4f', '#9a6fd1', '#e0ae12', '#8a5a32', '#d0607a', '#3a3a44'][v % 8]; }
@@ -196,7 +197,7 @@
         if (roofC) B.roof(x0 - 0.15, z0 - 0.15, x1 + 0.15, z1 + 0.15, base + hgt, Math.min(1.4, (x1 - x0) * 0.45), hexc(roofC));
       }
     }
-    return { P: new Float32Array(B.P), C: new Float32Array(B.C), G: new Float32Array(B.G), kind, solid, what, ids, buildings };
+    return { P: new Float32Array(B.P), C: new Float32Array(B.C), G: new Float32Array(B.G), kind, solid, blocks, what, ids, buildings };
   }
 
   // ---------- the viewer: walk, or look from above ----------
@@ -226,7 +227,7 @@
     let game = null;
     if (canGame && opt.art === 'game') {
       try {
-        const list = TownModels.build(s, { date: today, snowy: season === 'snow', buildings: T.buildings });
+        const built = TownModels.build(s, { date: today, snowy: season === 'snow', buildings: T.buildings }), list = built.batches;
         const p2 = gl.createProgram(); gl.attachShader(p2, sh(gl.VERTEX_SHADER, VS2)); gl.attachShader(p2, sh(gl.FRAGMENT_SHADER, FS2)); gl.linkProgram(p2);
         const L2 = { p: gl.getAttribLocation(p2, 'p'), uv: gl.getAttribLocation(p2, 'uv'), c: gl.getAttribLocation(p2, 'c'), m: gl.getUniformLocation(p2, 'm'), fog: gl.getUniformLocation(p2, 'fog'), light: gl.getUniformLocation(p2, 'light'), far: gl.getUniformLocation(p2, 'far'), night: gl.getUniformLocation(p2, 'night'), glow: gl.getUniformLocation(p2, 'glow') };
         const texs = new Map();
@@ -244,7 +245,7 @@
           }
           return { buf, tx, n: b.data.length / 8, glow: b.glow };
         });
-        if (batches.length) game = { prog: p2, L: L2, batches };
+        if (batches.length) game = { prog: p2, L: L2, batches, height: built.height, water: built.water };
       } catch (e) { game = null; }
     }
 
@@ -252,11 +253,21 @@
     // on the nearest spot you can stand on.
     const home = T.buildings.find(b => /^House/.test(b.name)) || T.buildings.find(b => /Town Hall/.test(b.name));
     let sx = home ? (home.x0 + home.x1) / 2 : 32, sz = home ? home.z1 + 3.5 : 32;
-    const okAt = (x, z) => x >= 0 && z >= 0 && x < N && z < N && !T.solid[Math.floor(z) * N + Math.floor(x)];
+    // With the game's acres, the ground's own heights and water decide where you can walk (objects still block their
+    // spots); otherwise Leaflet's acre shapes do.
+    const blockedAt = k => (game ? T.blocks[k] || game.water[k] : T.solid[k]);
+    const groundAt = (x, z) => {
+      if (!game) return 0;
+      const fx = Math.max(0, Math.min(N - 1.001, x - 0.5)), fz = Math.max(0, Math.min(N - 1.001, z - 0.5)), x0 = Math.floor(fx), z0 = Math.floor(fz), tx = fx - x0, tz = fz - z0, H = game.height;
+      const hh = (a, b) => H[Math.min(N - 1, b) * N + Math.min(N - 1, a)];
+      return (hh(x0, z0) * (1 - tx) + hh(x0 + 1, z0) * tx) * (1 - tz) + (hh(x0, z0 + 1) * (1 - tx) + hh(x0 + 1, z0 + 1) * tx) * tz;
+    };
+    const okAt = (x, z) => x >= 0 && z >= 0 && x < N && z < N && !blockedAt(Math.floor(z) * N + Math.floor(x));
     if (!okAt(sx, sz)) { let found = false; for (let r = 1; r < 12 && !found; r++) for (let dz = -r; dz <= r && !found; dz++) for (let dx = -r; dx <= r && !found; dx++) if (okAt(sx + dx, sz + dz)) { sx += dx; sz += dz; found = true; } }
     const me = { x: sx, z: sz, yaw: Math.PI, pitch: -0.1 }, sky = { on: false, yaw: 0.6, pitch: 0.95, dist: 60 };
     const keys = new Set(), info = h('div', { class: 'town3d-info' }), mode = h('button', { class: 'btn small' }, '🦅 Bird’s-eye');
-    const free = (x, z) => x >= 0.3 && z >= 0.3 && x < N - 0.3 && z < N - 0.3 && !T.solid[Math.floor(z) * N + Math.floor(x)];
+    // A step can't climb or drop more than a slope does (so cliffs are only reached by their ramps).
+    const free = (x, z) => x >= 0.3 && z >= 0.3 && x < N - 0.3 && z < N - 0.3 && !blockedAt(Math.floor(z) * N + Math.floor(x)) && (!game || Math.abs(groundAt(x, z) - groundAt(me.x, me.z)) < 0.35);
     const pat = weatherPattern(s, today), snowy = season === 'snow' || season === 'winter';
     const drops = [];   // rain or snow around the camera
 
@@ -290,7 +301,7 @@
       gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(...M.fog, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       let eye, at, far;
       if (sky.on) { const cx = 32, cz = 32; eye = [cx + Math.sin(sky.yaw) * Math.cos(sky.pitch) * sky.dist, Math.sin(sky.pitch) * sky.dist, cz + Math.cos(sky.yaw) * Math.cos(sky.pitch) * sky.dist]; at = [cx, 0, cz]; far = 220; }
-      else { eye = [me.x, 1.25, me.z]; at = [me.x + Math.sin(me.yaw) * Math.cos(me.pitch), 1.25 + Math.sin(me.pitch), me.z + Math.cos(me.yaw) * Math.cos(me.pitch)]; far = M.wet ? 26 : 34; }
+      else { const gy = 1.25 + groundAt(me.x, me.z); eye = [me.x, gy, me.z]; at = [me.x + Math.sin(me.yaw) * Math.cos(me.pitch), gy + Math.sin(me.pitch), me.z + Math.cos(me.yaw) * Math.cos(me.pitch)]; far = M.wet ? 26 : 34; }
       const MV = mul(persp(1.0, W / H, 0.1, 400), look(eye, at));
       if (game) {
         // Night-light textures (lit windows) only show after dark.
@@ -385,7 +396,7 @@
       h('div', { class: 'town3d-bar town3d-tools' }, hourSel, wxSel, music, photo, art, h('span', { class: 'spacer' }),
         h('span', { class: 'muted', style: { fontSize: '12px' } }, SEASON_WORD[season])),
       h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px', textAlign: 'center' } }, game
-        ? 'Drawn with the game’s own acres, trees, flowers and buildings from your ROM, laid out flat to walk on and lit by the game clock with the weather the game rolled for today. Leaf colours follow the date (approximate).'
+        ? 'Drawn with the game’s own acres, trees, flowers and buildings from your ROM, laid out flat to walk on (you walk on the acres’ own ground and can’t wade into water), with trees on the game’s own calendar of leaf colours and blossom, lit by the game clock with the weather the game rolled for today. Fruit on trees isn’t shown yet.'
         : 'Every tree, flower, rock and building is where your save has it, lit by the game clock with the weather the game rolled for today. The ground is shaped from each acre’s type, so rivers and cliffs are close to the game’s but not exact. Drawn by Leaflet; no game art.'));
   }
 
