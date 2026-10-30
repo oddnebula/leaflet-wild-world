@@ -102,8 +102,17 @@
   }
   // ---------- installing and updating Leaflet Link ----------
   // js/linkapp.js carries the Leaflet Link this Leaflet was built with (tools/build_link_js.py).
-  const APPB = window.LEAFLET_LINK_APP || null;
-  const appBytes = () => Uint8Array.from(atob(APPB.data), c => c.charCodeAt(0));
+  // Only its version, size and CRC load with the page (js/linkapp-info.js); the app itself (js/linkapp.js, ~900 KB)
+  // loads when it's installed or sent as an update, so Leaflet starts quicker.
+  const APPB = window.LEAFLET_LINK_INFO || window.LEAFLET_LINK_APP || null;
+  let appLoading = null;
+  const appData = () => window.LEAFLET_LINK_APP ? Promise.resolve(window.LEAFLET_LINK_APP.data) : (appLoading = appLoading || new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'js/linkapp.js';
+    sc.onload = () => window.LEAFLET_LINK_APP ? res(window.LEAFLET_LINK_APP.data) : rej(new Error('Leaflet Link couldn’t be loaded.'));
+    sc.onerror = () => { appLoading = null; rej(new Error('Leaflet Link couldn’t be loaded. Is js/linkapp.js in your Leaflet folder?')); };
+    document.head.append(sc);
+  }));
+  const appBytes = () => appData().then(d => Uint8Array.from(atob(d), c => c.charCodeAt(0)));
   // The Mac app's bridge, or on Windows Leaflet Helper (js/winhelper.js), which takes the same commands.
   const mac = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.leaflet;
   const native = mac || window.LeafletHelper || null;
@@ -126,11 +135,14 @@
     } else if (info.state === 'notFound' || info.state === 'error') sfx.error();
     paint();
   };
-  function sendToLauncher() {
+  async function sendToLauncher() {
     Object.assign(I, { state: 'searching', progress: 0, error: '' }); sfx.click(); paint();
-    native.postMessage({ cmd: 'install3ds', data: APPB.data, address: I.manual.trim().replace(/:\d+$/, '') });
+    try { native.postMessage({ cmd: 'install3ds', data: await appData(), address: I.manual.trim().replace(/:\d+$/, '') }); }
+    catch (e) { Object.assign(I, { state: 'error', error: e.message }); sfx.error(); paint(); }
   }
-  function downloadApp() { download('LeafletLink.3dsx', appBytes()); sfx.pop(); }
+  async function downloadApp() {
+    try { download('LeafletLink.3dsx', await appBytes()); sfx.pop(); } catch (e) { sfx.error(); toast(e.message, '⚠️'); }
+  }
 
   // Everything updates together: when this Leaflet carries a newer Leaflet Link than the 3DS has, it sends it once
   // the card has been read (once per version per session). The 3DS still asks before installing it.
@@ -147,7 +159,7 @@
     Object.assign(U, { state: 'sending', message: '' }); S.note = ''; paint();
     try {
       const q = new URLSearchParams({ crc: APPB.crc, version: APPB.version, job });
-      let st = await json(`/update?${q}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: appBytes() }, 60000);
+      let st = await json(`/update?${q}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await appBytes() }, 60000);
       U.state = st.state; paint();
       while (st.state === 'confirm' || st.state === 'updating') {
         await new Promise(r => setTimeout(r, 400));
@@ -439,7 +451,7 @@
   const showTime = t => t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'date unknown';
   const fileName = p => p.split('/').pop();
   // Leaflet Link names each backup for why it was made.
-  const backupWhy = p => /before restoring/.test(p) ? 'Leaflet Link backup, kept before a save was put back' : /before Leaflet/.test(p) ? 'Leaflet Link backup, kept before Leaflet saved over it' : 'Leaflet Link backup, made on the 3DS';
+  const backupWhy = p => /from Leaflet on a phone/.test(p) ? 'Backup from Leaflet on a phone' : /before restoring/.test(p) ? 'Leaflet Link backup, kept before a save was put back' : /before Leaflet/.test(p) ? 'Leaflet Link backup, kept before Leaflet saved over it' : 'Leaflet Link backup, made on the 3DS';
 
   // Reads one save from the 3DS's SD card, checked against its CRC like the game card (three tries).
   async function pullSD(path) {
@@ -870,6 +882,22 @@
       h('div', { class: 'muted' }, `${r.length ? r.join(', ') : 'No residents yet'} · ${s.region}`));
   }
 
+  // The card's town on your local time, only when you ask: with the 3DS's clock known, the town's clock and the dates
+  // the game counts from move together (js/gameclock.js), and it goes back through the usual review and A on the 3DS.
+  function localTimeLine(c) {
+    if (!c.save || S.dsDelta == null || !S.info.card.writable) return null;
+    const off = GC.fromLocal(c.save, S.dsDelta);
+    if (Math.abs(off) < 60) return null;
+    return h('div', { class: 'sync-msg', style: { marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+      h('span', { style: { flex: 1, minWidth: '200px' } }, `🕰️ This town’s clock is ${GC.span(off)} ${off > 0 ? 'ahead of' : 'behind'} your local time.`),
+      h('button', { class: 'btn small', onclick: async () => {
+        const ok = await UI.confirmSheet('Set this town to your local time?', `The town’s clock moves ${GC.span(off)} ${off > 0 ? 'back' : 'ahead'} to match ${PHONE ? 'this device' : 'this computer'}, and the dates the game counts from move with it, so turnips keep and the game sees no time travel. You’ll check it and press A on the 3DS before anything is written.`, 'Set it');
+        if (!ok) return;
+        const t = parse(new Uint8Array(c.bytes)); if (!t) return;
+        GC.matchLocal(t, S.dsDelta);
+        S.file = t; S.fileName = 'the game card’s town, set to your local time'; S.emuStart = null; startReview(1, 'ds');
+      } }, 'Set to my local time'));
+  }
   function cartCard() {
     const c = S.cart;
     if (S.reading && !c) return h('div', { class: 'card pad sync-reading' }, h('span', { class: 'sync-spin' }), 'Reading your game card…');
@@ -884,6 +912,7 @@
           native ? tile('🎮', 'Play on melonDS', 'Starts melonDS with this town and brings it back to the card when you’re done.', playOnEmu, !c.save || E.phase === 'playing' || E.phase === 'starting' || (E.phase === 'back' && E.session)) : null,
           PHONE ? tile('💾', 'Save a copy', 'This town as a .sav file, to keep or to play on another system.', forEmulator, !c.save) : tile('💾', 'Save for an emulator', 'A .sav for melonDS, DeSmuME or another emulator.', forEmulator, !c.save),
           tile('📤', 'Send to the game card', PHONE ? 'Put a town from Leaflet back on the card.' : 'Put a town from Leaflet or an emulator back on the card.', () => startReview(), !S.info.card.writable)),
+        localTimeLine(c),
         // Why sending is off. The Sanyo chip (62 16 00) in some Wild World cards needs Leaflet Link 1.3.2 or newer.
         !S.info.card.writable ? h('div', { class: 'sync-msg bad', style: { marginTop: '10px' } }, '⚠️ ',
           S.info.card.chipId === '621600' && newer('1.3.2', S.info.version) ? `Sending is off because Leaflet Link ${S.info.version} doesn’t know this card’s save chip. Update Leaflet Link (above) to 1.3.2 or newer and sending works.`

@@ -951,7 +951,7 @@ static void send_info(void) {
   char pw[120] = ""; bool power = plat_power_ok(pw, sizeof pw); char pj[160]; json_str(pj, sizeof pj, pw);
   char clk[32]; plat_clock(clk, sizeof clk);
   snprintf(j, sizeof j,
-    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\",\"web\",\"sdfull\"],\"discovery\":%s,"
+    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\",\"web\",\"sdfull\",\"backup\"],\"discovery\":%s,"
     "\"card\":{\"present\":%s,\"ds\":%s,\"title\":%s,\"code\":%s,\"ready\":%s,\"writable\":%s,\"chipId\":\"%02X%02X%02X\",\"size\":%u,\"why\":%s},"
     "\"power\":{\"ok\":%s,\"why\":%s}}",
     LL_VERSION, LL_PROTOCOL, STATE_NAMES[st.state], clk, usock >= 0 ? "true" : "false", card.present ? "true" : "false", card.ds ? "true" : "false", t, c,
@@ -1074,6 +1074,23 @@ static void handle(void) {
     if (strlen(crc) != 8) { respond_error(400, "Missing CRC."); return; }
     int code = stage_update(body, blen, (uint32_t)strtoul(crc, NULL, 16), version, (uint32_t)strtoul(job, NULL, 10), conn.ip, why, sizeof why);
     if (code) respond_error(code, why); else send_status();
+    return;
+  }
+  // A backup from Leaflet on a phone: a phone's own storage belongs to this 3DS's address, so the town is also kept
+  // in Leaflet Link's backups folder, where it lists and survives with the rest. Only adds a file; never writes the card.
+  if (!strcmp(method, "POST") && !strcmp(target, "/backup")) {
+    char crc[16], why[160];
+    query(q, "crc", crc, sizeof crc);
+    if (!free_for_job()) { respond_error(409, "Leaflet Link is busy. Try again when the 3DS says it's done."); return; }
+    if (blen != LL_SAVE_SIZE || strlen(crc) != 8 || ll_crc32(body, blen) != (uint32_t)strtoul(crc, NULL, 16)) { respond_error(400, "The backup was damaged on its way over Wi-Fi. Nothing was kept."); return; }
+    if (!ll_save_region(body) || ll_check_save(body, why, sizeof why)) { respond_error(422, "That isn't a healthy Wild World save, so it wasn't kept."); return; }
+    char keep[sizeof st.backup]; snprintf(keep, sizeof keep, "%s", st.backup);   // a backup made here isn't a job's
+    bool ok = keep_backup("from Leaflet on a phone", body, blen);
+    char path[sizeof st.backup + 40], j[sizeof path + 40]; json_str(path, sizeof path, st.backup);
+    snprintf(st.backup, sizeof st.backup, "%s", keep);
+    if (!ok) { respond_error(500, "The backup couldn't be written to the SD card."); return; }
+    snprintf(j, sizeof j, "{\"path\":%s}", path); respond_json(200, j);
+    scan.done = 0;   // the next list includes it
     return;
   }
   if (!strcmp(method, "POST") && !strcmp(target, "/cancel")) {

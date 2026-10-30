@@ -96,7 +96,7 @@ Download the latest build from [Releases](https://github.com/oddnebula/leaflet-w
 - **Phone or tablet:** open Leaflet Link on your 3DS and scan the QR code on its lower screen (or the one in Cartridge
   Sync). Leaflet comes straight from the 3DS over your Wi-Fi and connects to it by itself. Parts that need a computer
   (melonDS, SD card readers, installing Leaflet Link) are hidden, a long press works as a right-click, and Walk Around
-  Town has a walk pad.
+  Town has a walk pad. Saves you make on the phone are also kept on the 3DS's SD card.
 
 **Updates, all together.** Every part of Leaflet carries one version number. The Mac app and the Windows app check
 GitHub once a day (Backups › Leaflet), download a new release, check it against GitHub's SHA-256 and start again.
@@ -195,6 +195,11 @@ too: "Juniper caught a Rainbow Trout for the first time."
 one in the save. So Leaflet reads the ID from the save itself and gives it to melonDS: one click in the Mac app or
 on Windows, or a ready-made `wfcsettings.bin` (or your own firmware dump, updated). The same friend code and friends then work on the
 emulator and on your DS. Each resident's friend code, and their friends', also show on their page.
+
+**Your town on your own time.** If the town's clock is off from yours (a 3DS set to another time zone, or past time
+travel), Cartridge Sync offers **Set to my local time**, and Town Records › Game clock has **Match my local time**.
+Either moves the dates the game counts from along with the clock, so turnips keep and the game sees no time travel.
+Nothing changes until you choose it, and on the game card it goes through the usual review and **A** on the 3DS.
 
 **Quicker SD card searches on the 3DS.** Leaflet Link remembers the folders where it found saves and looks there
 first next time; **Look everywhere** (X on the 3DS, or in Cartridge Sync) searches the whole card again.

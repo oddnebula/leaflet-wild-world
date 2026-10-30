@@ -102,9 +102,10 @@ design pixels, gyroid sound IDs, villager voice pitch, MelodyPlayer, JP/KR saves
 - SD cards are searched for saves and ROMs when they're put in (Mac app, Leaflet Helper); Leaflet Link remembers the
   folders where it found saves, with Look everywhere for a full search.
 - Music is scheduled a little ahead (no stalls), and the Sound Room lists only tracks that play on their own.
-- Still to do before 2.0 ships: test Leaflet Link 2.0.0 on a real 3DS (QR on the lower screen, page load speed, the
-  Sanyo chip), and retest Windows (updater, SD scan, app-data copy). A .cia build was considered and skipped for 2.0;
-  Leaflet Link stays a .3dsx.
+- Then: a What's new sheet for people updating, phone backups kept on the 3DS, Set to my local time in Cartridge Sync
+  (only when chosen), and the built-in Leaflet Link loading only when it's needed. Leaflet Link 2.0 was tested on a
+  real 3DS. A .cia build was considered and skipped; Leaflet Link stays a .3dsx. A share button on phones isn't
+  possible: browsers only offer sharing on secure (https) pages, and Leaflet from the 3DS is plain http.
 
 ## Fixes from testing on Windows (October 29, 2026)
 - [x] Install melonDS picks the build for the PC's architecture and checks the exe's machine type (it installed the

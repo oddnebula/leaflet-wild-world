@@ -310,6 +310,17 @@ j = sd_json('/sd?fresh=1')
 check('folders: nothing left there, so the whole card is walked', not j.get('quick') and [x['path'] for x in j['saves']] == ['/moved.sav'] and open(memo).read() == '/\n', (j, open(memo).read()))
 stop(p, d)
 
+p, cp, d = run([])
+code, _, b = req('POST', f'/backup?crc={zlib.crc32(orig):08x}', orig); j = json.loads(b)
+kept = backups(d)
+check('phone backup: kept in the backups folder, card untouched', code == 200 and len(kept) == 1 and 'from Leaflet on a phone' in kept[0] and open(os.path.join(d, *BK, kept[0]), 'rb').read() == orig and open(cp, 'rb').read() == orig, (code, j, kept))
+code, _, b = req('POST', '/backup?crc=00000000', orig)
+check('phone backup: a damaged one is refused', code == 400 and len(backups(d)) == 1, (code, b))
+bad = bytearray(orig); bad[0x200] ^= 1
+code, _, b = req('POST', f'/backup?crc={zlib.crc32(bytes(bad)):08x}', bytes(bad))
+check('phone backup: an unhealthy save is refused', code == 422 and len(backups(d)) == 1, (code, b))
+stop(p, d)
+
 import gzip
 p, cp, d = run([]); code, hd, b = req('GET', '/')
 try: page = gzip.decompress(b).decode()

@@ -17,7 +17,7 @@
   const helper = () => window.LeafletHelper && LeafletHelper.alive !== false ? LeafletHelper : null;
   const native = () => mac || helper();
   const KEY = 'leaflet-updates';
-  const prefs = (() => { try { return Object.assign({ auto: true, last: 0, snapshot: 0, skip: '' }, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return { auto: true, last: 0, snapshot: 0, skip: '' }; } })();
+  const prefs = (() => { try { return Object.assign({ auto: true, last: 0, snapshot: 0, skip: '', seen: '' }, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return { auto: true, last: 0, snapshot: 0, skip: '', seen: '' }; } })();
   const savePrefs = () => { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (e) { /* private mode */ } };
   const newer = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
 
@@ -155,7 +155,39 @@
         h('button', { class: 'btn small', onclick: () => keepCopy().then(ok => { if (ok) { sfx.bell(); toast('Copy kept', '🗂️'); refresh(); } }, () => { sfx.error(); toast('The copy couldn’t be written', '⚠️'); }) }, 'Keep a copy now')) : null)];
   }
 
+  // ---------- what's new ----------
+  // Shown once after updating to a new version (not on a first visit: there's nothing to compare with yet).
+  const NEW = {
+    '2.0.0': [
+      ['📱', 'Leaflet on your phone', 'Open Leaflet Link on your 3DS and scan its QR code: Leaflet opens on your phone or tablet, already connected to your game card.'],
+      ['🚶', 'Walk around your town', 'Your town in 3D, on foot or from above, lit by the game’s clock and weather.'],
+      ['🌹', 'Flower breeding', 'The game’s own hybrid odds, and the pairs already growing side by side in your town.'],
+      ['🎖️', 'Badges & Town vs Town', 'Badges earned from each save, and your towns compared side by side.'],
+      ['🕰️', 'Match my local time', 'Set the game clock to your own time without turnips spoiling (Town Records › Game clock).'],
+      ['🔄', 'Updates for everything', 'Leaflet keeps itself and Leaflet Link up to date, and your settings and backups come along.'],
+      ['💾', 'SD cards, found for you', 'Put in a flashcart’s card and Leaflet finds your saves and ROM on it.'],
+    ],
+  };
+  async function whatsNew() {
+    if (prefs.seen === VERSION) return;
+    const first = await isEmpty();
+    prefs.seen = VERSION; savePrefs();
+    const list = NEW[VERSION], root = document.getElementById('popover-root');
+    if (first || !list || !root || root.children.length) return;
+    const close = () => root.replaceChildren();
+    root.replaceChildren(h('div', { class: 'scrim', onclick: close }),
+      h('div', { class: 'sheet', style: { width: 'min(500px, calc(100vw - 32px))', top: '10vh' } },
+        h('div', { class: 'sheet-head' }, h('div', { class: 'top' }, h('h3', null, `🍃 What’s new in Leaflet ${VERSION.replace(/\.0$/, '')}`))),
+        h('div', { class: 'sheet-body', style: { padding: '12px 16px', maxHeight: '60vh', overflow: 'auto' } },
+          list.map(([em, title, text]) => h('div', { style: { display: 'flex', gap: '12px', padding: '8px 0' } },
+            h('span', { style: { fontSize: '24px', lineHeight: 1 } }, em),
+            h('div', null, h('b', null, title), h('div', { class: 'muted', style: { fontSize: '13px', marginTop: '2px' } }, text))))),
+        h('div', { class: 'sheet-foot' }, h('button', { class: 'btn leaf', onclick: close }, 'Let’s go!'))));
+    sfx.bell();
+  }
+
   window.AppData = { snapshot, restore, keepCopy, cards, check, newer };
+  setTimeout(() => whatsNew().catch(() => {}), 2500);
   // Wait for Leaflet Helper's first answer on Windows, then look; the daily check (apps only: the web version is always
   // the newest) waits a little longer.
   setTimeout(startup, 1500);

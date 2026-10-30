@@ -2,7 +2,7 @@
 # Bundles Leaflet into one gzipped page inside Leaflet Link (link/source/webapp.c), so a phone or tablet on the same
 # Wi-Fi can open http://<the 3DS's address>:8226/ and use Leaflet straight from the 3DS. Browsers won't let a page
 # from the web (https) talk to the 3DS (plain http on the home network), but a page the 3DS serves itself can.
-# js/linkapp.js (Leaflet Link inside Leaflet) is left out: a phone can't install Leaflet Link.
+# js/linkapp.js and js/linkapp-info.js (Leaflet Link inside Leaflet) are left out: a phone can't install Leaflet Link.
 # Run before building Leaflet Link (the Makefile does it for you).
 import gzip, os, re
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +11,7 @@ read = lambda p: open(os.path.join(root, p), encoding='utf-8').read()
 
 html = re.sub(r'<link rel="stylesheet" href="(css/[^"]+)">', lambda m: '<style>\n' + read(m.group(1)) + '\n</style>', html)
 def script(m):
-    if m.group(1) == 'js/linkapp.js': return ''
+    if m.group(1) in ('js/linkapp.js', 'js/linkapp-info.js'): return ''
     return '<script>\n' + read(m.group(1)).replace('</script', '<\\/script') + '\n</script>'
 html = re.sub(r'<script src="(js/[^"]+)"></script>', script, html)
 # Tells the page it came from Leaflet Link, so Cartridge Sync connects to this 3DS by itself.
@@ -32,6 +32,6 @@ with open(out, 'w') as f:
 # One version for everything: Leaflet Link takes Leaflet's.
 version = re.search(r"LEAFLET_VERSION = '([0-9.]+)'", read('js/version.js')).group(1)
 vh = os.path.join(root, 'link', 'source', 'version.h')
-text = f'// Written from js/version.js by tools/build_link_web.py. Leaflet and Leaflet Link share one version.\n#pragma once\n#define LL_VERSION "{version}"\n'
+text = f'// Written from js/version.js by tools/build_link_web.py. Leaflet and Leaflet Link share one version.\n#pragma once\n#ifndef LL_VERSION\n#define LL_VERSION "{version}"\n#endif\n'
 if not os.path.exists(vh) or open(vh).read() != text: open(vh, 'w').write(text)
 print(f'link/source/webapp.c: Leaflet for phones, {len(html):,} bytes ({len(gz):,} gzipped)')

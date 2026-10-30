@@ -5,9 +5,21 @@ World* game card over Wi-Fi, and write a town back to the card. Use it to edit y
 emulator with sharper graphics and then put the town back on the card.
 
 > [!WARNING]
-> Leaflet Link is new. It's been tested end to end against a simulated game card, including the failures below, but
-> **try it first with a game card whose save you've already backed up.** Leaflet Link keeps a backup of the save on
-> your SD card before it writes, every time.
+> Leaflet Link has been tested end to end against a simulated game card, including the failures below, and on a real
+> 3DS, but **try it first with a game card whose save you've already backed up.** Leaflet Link keeps a backup of the
+> save on your SD card before it writes, every time.
+
+## Leaflet on your phone
+
+Leaflet Link carries Leaflet itself (since 2.0). With Leaflet Link open, scan the QR code on the 3DS's lower screen
+with a phone or tablet on the same Wi-Fi (or type the address shown under it): Leaflet opens straight from the 3DS
+and connects to it by itself. Cartridge Sync on a computer shows the same code. Saves and backups made on the phone
+are also kept in Leaflet Link's backups folder, so they list on the 3DS and come back if its address changes.
+
+## Updates
+
+Leaflet Link has the same version number as Leaflet. When Leaflet connects to an older Leaflet Link it sends the one
+it carries; the 3DS asks for **A** before installing it, then you open Leaflet Link again.
 
 ## Installing it
 
@@ -235,7 +247,7 @@ purpose:
 | `--sd DIR` | the SD card (a folder) |
 | `--console` | the console's own menu, typed on stdin: `backup`, `health`, `scan`, `restore N`, `stop` |
 
-To build the simulator and run the end-to-end tests (60 checks, including updates, the console's menu, SD card saves
+To build the simulator and run the end-to-end tests (75 checks, including updates, the console's menu, SD card saves
 and the health check), use:
 
 ```bash
@@ -263,15 +275,17 @@ method is still written correctly, and the original is put back if a page can't 
 
 | Request | Answer |
 |---|---|
-| `GET /info` | app version, protocol, `features` (1.3: `sd`, `health`), the 3DS's clock, card (`present`, `code`, `ready`, `writable`, `why`), battery |
+| `GET /` | Leaflet itself, one gzipped page, for phones and tablets (2.0) |
+| `GET /info` | app version, protocol, `features` (1.3: `sd`, `health`; 2.0: `web`, `sdfull`, `backup`), the 3DS's clock, card (`present`, `code`, `ready`, `writable`, `why`), battery |
 | `GET /save` | the card's 256 KB save, with its CRC-32 in `X-Leaflet-CRC32` |
 | `POST /save?crc=&town=&residents=&job=` | a 256 KB save to write; checked, then waits for A on the 3DS |
 | `GET /status` | `state` (idle, confirm, backup, writing, verifying, restoring, done, failed, updating, checking), `kind` (card, update, sdfile, backup, health), progress, message, backup path, and for a health check `health` (passes, unstable areas, flipped bits, checksums) |
 | `POST /cancel` | sets aside a save that hasn't been confirmed, or stops a health check |
 | `POST /health` | starts the health check (1.3) |
-| `GET /sd[?fresh=1]` | starts looking through the SD card (unless a search just finished) and answers at once with `scanning` and what's been found so far; ask again while `scanning` is true (1.3.1). Wild World saves on the SD card: path, town, residents, size, when it was saved (3DS clock), region, `ok`, `kind` (backup or game) (1.3) |
+| `GET /sd[?fresh=1][&full=1]` | 2.0 looks only in the folders where it found saves before (`/3ds/LeafletLink/folders.txt`, answered with `quick`: true) unless they're empty or `full=1`. Starts looking through the SD card (unless a search just finished) and answers at once with `scanning` and what's been found so far; ask again while `scanning` is true (1.3.1). Wild World saves on the SD card: path, town, residents, size, when it was saved (3DS clock), region, `ok`, `kind` (backup or game) (1.3) |
 | `GET /sd/file?path=` | the first 256 KB of a listed save, with its CRC-32 (1.3) |
 | `POST /sd/file?path=&crc=&town=&residents=&job=` | a 256 KB save for a listed game save file; checked, then waits for A on the 3DS (1.3) |
+| `POST /backup?crc=` | a 256 KB save from Leaflet on a phone, kept in the backups folder if it's healthy; never written to the card (2.0) |
 | `POST /update?crc=&version=&job=` | a new `LeafletLink.3dsx`; checked (CRC, 3DSX header), then waits for A on the 3DS |
 
 `link/tests/mock_hbl.py` stands in for the Homebrew Launcher's receiver, to test the wireless installers. It was

@@ -30,6 +30,8 @@
   // If the browser's storage is blocked (another window mid-upgrade, private mode), carry on without backups.
   const all = () => Promise.race([tx('readonly', st => req(st.getAll())).catch(() => []), new Promise(res => setTimeout(() => res([]), 4000))]);
 
+  const CRC = (() => { const t = new Uint32Array(256); for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; } return t; })();
+  function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
   // FNV-1a over the main block and town hall letters: what changes when a town changes.
   function hash(bytes) { let x = 0x811C9DC5; for (let i = 0; i < bytes.length; i++) { x ^= bytes[i]; x = Math.imul(x, 0x01000193) >>> 0; } return x.toString(16); }
   function describe(bytes) {
@@ -60,6 +62,10 @@
     rec.id = await tx('readwrite', st => req(st.add(rec)));
     if (kind !== 'draft') await prune(info.key);
     if (native && kind !== 'draft') native.postMessage({ cmd: 'backupFile', town: info.town, name: `${stamp(rec.when)} ${KINDS[kind][1]}.sav`, data: b64(data) });
+    // Leaflet on a phone, opened from Leaflet Link: this browser's storage belongs to the 3DS's address, so saves and
+    // hand-made backups are also kept on the 3DS's SD card (Leaflet Link 2.0), where they show up again if it changes.
+    if (window.LEAFLET_FROM_LINK && (kind === 'saved' || kind === 'manual') && data.length === 0x40000)
+      fetch(`/backup?crc=${crc32(data).toString(16).padStart(8, '0')}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: data }).catch(() => { /* the 3DS keeps its own backups too */ });
     listeners.forEach(f => f());
     return rec;
   }
