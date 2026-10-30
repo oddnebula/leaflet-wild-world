@@ -119,6 +119,45 @@
   });
 
   // =====================================================================================
+  // Tomorrow and the week ahead: everything the game has already decided. The weather for tomorrow is rolled with today's
+  // (WeatherRecord's second pattern), the whole week's turnip prices are rolled on Sunday, this week's visitors are set
+  // in EventWeekSlots and festivals and birthdays come from the calendar.
+  VIEWS.push({
+    id: 'tomorrow', group: 'Town', icon: '🔮', title: () => 'Tomorrow & Next Week', sub: s => `What ${s.str(4, 8)} has already decided`,
+    tips: ['The game rolls tomorrow’s weather together with today’s, and the whole week’s turnip prices on Sunday morning, so these are set already.', 'If the save hasn’t reached today yet, the game rolls fresh ones the next time you play.'],
+    render(s, { go }) {
+      const now = CAL.gameNow(s), x = now.getHours(), tmr = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const [wd, wm, wy] = s.bytes(WX, 3), wxDate = wm ? new Date(2000 + wy, wm - 1, wd) : null;
+      const tomorrowPat = wxDate && sameDay(wxDate, now) ? s.u8(WX + 5) : wxDate && sameDay(wxDate, tmr) ? s.u8(WX + 4) : null;
+      // Turnips: the week that started on the stored Sunday.
+      const [td, tm, ty] = s.bytes(TURNIP, 3), week = tm ? new Date(2000 + ty, tm - 1, td) : null, inWeek = week && now >= week && now - week < 7 * 86400e3;
+      const slotNow = now.getDay() * 2 + (x >= 12 ? 1 : 0), prices = range(14).map(i => s.u8(TURNIP + 0x0A + i));
+      const ahead = inWeek ? range(14).filter(i => i >= 2 && i > slotNow).map(i => ({ i, p: prices[i] })) : [];
+      const best = ahead.reduce((b, c) => (!b || c.p > b.p ? c : b), null);
+      const slotName = i => `${DAYS[i >> 1].slice(0, 3)} ${i & 1 ? 'PM' : 'AM'}`;
+      // The next seven days from the calendar (festivals, birthdays, this week's visitors).
+      const y = now.getFullYear(), days = [];
+      for (let k = 1; k <= 7; k++) { const t = new Date(y, now.getMonth(), now.getDate() + k), evs = CAL.on(CAL.year(s, t.getFullYear()), t.getMonth() + 1, t.getDate()).filter(e => e.y === t.getFullYear() && e.kind !== 'weekly'); days.push({ t, evs, kk: t.getDay() === 6, joan: t.getDay() === 0 }); }
+      const redd = s.u8(WEEK + 0x10);
+      return [
+        section('⛅ Tomorrow’s weather', tomorrowPat === null ? 'Not rolled yet' : `${DAYS[tmr.getDay()]}, ${MONTHS[tmr.getMonth()]} ${tmr.getDate()} · pattern ${tomorrowPat}`),
+        h('div', { class: 'card pad' }, tomorrowPat === null ? h('div', { class: 'muted' }, 'The game rolls tomorrow’s weather when today begins in the game. Play today, then look again.') : strip(tomorrowPat, -1),
+          h('div', { style: { marginTop: '8px' } }, h('button', { class: 'btn small', onclick: () => go('records') }, 'Change it in Town Records'))),
+        section('🥬 Turnips for the rest of the week', inWeek ? (best ? `Best ahead: ${fmt(best.p)} bells on ${slotName(best.i)}` : 'The week’s selling is over') : 'This week’s prices aren’t rolled yet'),
+        h('div', { class: 'card pad' }, inWeek ? h('div', { class: 'tmr-turnips' }, range(12).map(k => { const i = k + 2, p = prices[i], past = i <= slotNow; return h('div', { class: 'tt' + (past ? ' past' : '') + (best && best.i === i ? ' best' : '') },
+          h('span', { class: 'muted' }, slotName(i)), h('b', null, p ? fmt(p) : '—')); })) : h('div', { class: 'muted' }, 'Joan rolls the week’s prices on Sunday morning.'),
+          inWeek ? h('div', { class: 'muted', style: { marginTop: '8px', fontSize: '12px' } }, `Joan’s price this week: ${fmt(prices[0])} bells. Prices are fixed for the week; the game doesn’t change them later.`) : null),
+        section('🗓️ The next seven days'),
+        h('div', { class: 'card pad tmr-days' }, days.map(({ t, evs, kk, joan }) => h('div', { class: 'tmr-day' + (evs.length ? ' has' : '') },
+          h('div', { class: 'd' }, h('b', null, DAYS[t.getDay()].slice(0, 3)), h('span', null, `${MONTHS[t.getMonth()].slice(0, 3)} ${t.getDate()}`)),
+          h('div', { class: 'e' }, evs.map(e => h('span', { class: 'chip' }, e.emoji, ' ', e.name)), t.getDay() === redd ? h('span', { class: 'chip' }, '🦊 Crazy Redd') : null,
+            joan ? h('span', { class: 'chip' }, '🐗 Joan, 6 AM–noon') : null, kk ? h('span', { class: 'chip' }, '🎸 K.K. at the Roost, 8 PM') : null,
+            !evs.length && !joan && !kk && t.getDay() !== redd ? h('span', { class: 'muted' }, 'A quiet day') : null)))),
+      ];
+    },
+  });
+
+  // =====================================================================================
   let calY = null, calM = null, show = { festival: true, birthday: true, visitor: true, weekly: false };
   const KIND = { festival: ['🎉', 'Festivals'], birthday: ['🎂', 'Birthdays'], visitor: ['🐫', 'This week’s visitors'], weekly: ['🎸', 'Joan and K.K. every week'] };
   function download(name, text) {

@@ -70,12 +70,11 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 - [ ] Main Street (Nook's, Able Sisters, museum) inside, with the bg/a256–a258 interior models.
 
 **Chunk B: for planners and completionists**
-- [ ] Town planner: paint trees, flowers and paths over the map with each acre's perfect-town status updating live.
-- [ ] Flower breeding planner: which pairs to plant side by side for every hybrid, on your own map.
-- [ ] Tomorrow and next week: everything the game has already rolled (tomorrow's weather, the week's turnip prices,
-  this week's visitors, Nook's restock, the next festival), on one page.
-- [ ] Badges across all your towns, earned from save data (golden tools, full museum, Platinum member, savings letters).
-- [ ] Town vs town: two different towns side by side (the Backups compare only does versions of one town).
+- [x] Town planner: paint trees and flowers over the map with each acre's perfect-town score updating live (the game's exact scoring, decoded).
+- [x] Flower breeding planner: the game's own hybrid odds, the best pairs for each colour, and the pairs in your town.
+- [x] Tomorrow and next week: tomorrow's weather, the rest of the week's turnip prices, and seven days of events.
+- [x] Badges across all your towns, earned from save data (17 so far).
+- [x] Town vs town: every town you've opened side by side, with a crown for whoever leads.
 
 **Chunk C: for hardcore fans**
 - [ ] Game script browser: every line of dialogue and every letter template, read from your ROM's message archives and

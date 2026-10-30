@@ -275,7 +275,7 @@
       const songs = D.songs.filter((n, i) => n && s.bit(0xFAEC, i)).length;
       const house = window.WW_HOUSE.getF(s, 'size');
       const loan = s.u32(0xFAE8);
-      const pt = (() => { let perfect = 0; for (let a = 0; a < 16; a++) { let t = 0, f = 0, w = 0; for (let k = 0; k < 256; k++) { const id = s.u16(0xC354 + (a * 256 + k) * 2); if ((id >= 0x1D && id <= 0x24) || id === 0x1B || id === 0x89) w++; else if (id >= 0x25 && id <= 0x6D) t++; else if (id <= 0x1A || (id >= 0x6E && id <= 0xA5)) f++; } if (w <= 2 && ((t >= 12 && t <= 15 && f >= 3) || (t < 12 && f >= 3 + (12 - t) * 2) || (t > 15 && f >= 3 + (t - 15) * 2))) perfect++; } return perfect; })();
+      const pt = (() => { const T = window.WW_PERFECT.town(s); return T.counts[3] + T.counts[4]; })();   // acres at 95+, the game's own scoring (js/perfect.js)
       const tile = (em, title, done, total, link, note) => h('button', { class: 'goal' + (done >= total ? ' done' : ''), onclick: () => go(link) },
         h('div', { class: 'goal-h' }, h('span', { class: 'goal-em' }, em), h('b', null, title), done >= total ? h('span', { class: 'badge ok' }, 'Complete!') : null),
         bar(done, total), note ? h('div', { class: 'ex-meta', style: { marginTop: '6px' } }, note) : null);
@@ -319,7 +319,7 @@
           ...WINGS.map(w => tile(w.em, `Museum: ${w.name}`, c[w.id], w.list.length, 'museum')),
           tile('🎸', 'K.K. songs', songs, 70, 'house', 'K.K. plays at The Roost on Saturdays, 8pm to midnight. Request a song to get a copy.'),
           tile('🏠', 'House upgrades', house, 6, 'house', loan ? `${fmt(loan)} bells still owed to Nook.` : 'Loan fully paid!'),
-          tile('🌳', 'Perfect acres', pt, 16, 'town', 'All 16 perfect, then keep it up for 15 days for the Golden Can.')),
+          tile('🌳', 'Acres scoring 95+', pt, 16, 'map', 'A perfect town needs all 16 at 95 or more and 8 at 101 or more; keep it 15 days for the Golden Can. Plan it on the Town Map.')),
         section('Residents'), per.length ? per : h('div', { class: 'card' }, h('div', { class: 'empty-note' }, 'No residents yet.')),
         section('🦴 Fossil assessor', 'Unassessed fossils in pockets and dressers'), fossilAssessor(s, refresh),
         section('Town milestones', 'From the game’s town event flags'),

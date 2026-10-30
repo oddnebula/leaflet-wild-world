@@ -75,38 +75,25 @@
     ['🕳️', 'Fill holes and pitfalls', 'Removes buried pitfall seeds and leftover holes.', s => { let n = 0; eachMapCell(s, (i, id) => { if (id === 0x1566 || id === 0xA6 || id === 0x103) { s.set16(MAP + i * 2, EMPTY); n++; } }); return `Filled ${n} spots`; }],
   ];
 
-  function perfectTown(s) {
-    const res = [];
-    for (let ay = 0; ay < 4; ay++) for (let ax = 0; ax < 4; ax++) {
-      let trees = 0, flowers = 0, weeds = 0, junk = 0;
-      for (let k = 0; k < 256; k++) {
-        const id = s.u16(MAP + ((ay * 4 + ax) * 256 + k) * 2);
-        if (isWeed(id)) weeds++;
-        else if (id >= 0x25 && id <= 0x6D) trees++;
-        else if (id <= 0x1A || (id >= 0x6E && id <= 0xA5)) flowers++;
-        else if ((id & 0xF000) === 0x1000 || (id & 0xF000) === 0x3000 || (id & 0xF000) === 0x4000 || (id >= 0x137D && id <= 0x137F)) junk++;
-      }
-      const bad = weeds > 2 || junk > 2;
-      const perfect = !bad && ((trees >= 12 && trees <= 15 && flowers >= 3) || (trees < 12 && flowers >= 3 + (12 - trees) * 2) || (trees > 15 && flowers >= 3 + (trees - 15) * 2));
-      res.push({ trees, flowers, weeds, junk, status: bad ? 'bad' : perfect ? 'perfect' : 'ok' });
-    }
-    return res;
+  // The perfect-town rating, exactly as the game works it out (js/perfect.js).
+  const MAP_PLAN = { on: false };
+  function perfectGrid(s) {
+    const T = window.WW_PERFECT.town(s);
+    return { T, grid: h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', padding: '12px' } },
+      T.acres.map(a => h('div', { class: 'dex-item' + (a.band === 4 ? ' on' : ''), title: a.todo.join(' · ') || 'Nothing to change', style: { flexDirection: 'column', alignItems: 'flex-start', gap: '2px' } },
+        h('b', null, `${String.fromCharCode(65 + (a.a >> 2))}-${(a.a & 3) + 1} · ${a.score}`, ' ', h('span', { class: 'muted', style: { fontWeight: 600 } }, a.word)),
+        h('span', { class: 'muted', style: { fontSize: '11.5px' } }, `🌳${a.trees} 🌷${a.flowers} 🌿${a.weeds} 📦${a.junk}${a.garbage ? ` 🥫${a.garbage}` : ''}${a.rafflesia ? ' 🌺' : ''}`)))) };
   }
 
   VIEWS.push({
     id: 'town', group: 'Town', icon: '⛲', title: () => 'Town Settings', sub: () => 'Name, ground cover, gate and groundskeeping',
-    tips: ['Changing the Town ID can break the link between residents and your town. Only change it if you know why.', 'The perfect-town check uses the community-researched rules: 12–15 trees per acre plus flowers, and no more than 2 weeds or junk items.'],
+    tips: ['Changing the Town ID can break the link between residents and your town. Only change it if you know why.', 'The perfect-town check uses the game’s own scoring (from the decompilation): 12–15 trees per acre plus flowers, and no more than 2 weeds or junk items.'],
     render(s, { refresh }) {
       let propagate = true;
       const grassNames = [[0, 'Triangles (snow: squares)'], [1, 'Circles (snow: stars)'], [2, 'Squares (snow: hexagons)']];
       const gate = [[0, 'Red roof'], [1, 'Green roof'], [2, 'Blue roof']];
       const FRUITS = [[0, '🍎 Apple'], [1, '🍊 Orange'], [2, '🍐 Pear'], [3, '🍑 Peach'], [4, '🍒 Cherry']];
-      const pt = perfectTown(s);
-      const ptGrid = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', padding: '12px' } },
-        pt.map(a => h('div', { class: 'dex-item' + (a.status === 'perfect' ? ' on' : ''), style: { flexDirection: 'column', alignItems: 'flex-start', gap: '2px' } },
-          h('b', null, a.status === 'perfect' ? '🌟 Perfect' : a.status === 'ok' ? '🙂 Okay' : '😟 Needs work'),
-          h('span', { class: 'muted', style: { fontSize: '11.5px' } }, `🌳${a.trees} 🌷${a.flowers} 🌿${a.weeds} 📦${a.junk}`))));
-      const perfectCount = pt.filter(a => a.status === 'perfect').length;
+      const { T: PT, grid: ptGrid } = perfectGrid(s);
       return [
         section('Identity'),
         card(
@@ -148,7 +135,7 @@
         section('Town event flags', '32 town-wide flags at 0x15FD8'),
         h('div', { class: 'callout' }, h('span', { class: 'em' }, '🧪'), h('div', null, h('b', null, 'These change what happens in-game'), 'Some are cleared every day by the game. Turning a “received” flag off can make a gift arrive again.')),
         window.FlagList(s, 0x15FD8, 32, window.WW_FLAGS.town, 'Town', window.WW_FLAGS.unused.town),
-        section('Perfect town check', `${perfectCount} of 16 acres look perfect`),
+        section('Perfect town check', `${PT.word}: ${PT.counts[3] + PT.counts[4]} of 16 acres at 95 or more, ${PT.excellent} at 101 or more (perfect needs all 16 and 8)`),
         h('div', { class: 'card' }, ptGrid),
       ];
     },
@@ -182,6 +169,7 @@
       const tip = h('div', { class: 'map-tip', hidden: true });
       const stage = h('div', { class: 'map-stage' }, cv, tip);
       let tool = 'inspect', brush = 0x0000, showGrid = true, showEmoji = true, sel = -1;
+      const PLAN = MAP_PLAN;
       const imgs = {};
       const acreAt = (ax, ay) => s.u8(ACRES + (ay + 1) * 6 + (ax + 1));
       const idx = (x, y) => ((y >> 4) * 4 + (x >> 4)) * 256 + (y & 15) * 16 + (x & 15);
@@ -218,8 +206,22 @@
         if (buried(i)) { g.strokeStyle = '#5b3b16'; g.lineWidth = 3; g.beginPath(); g.moveTo(px + 4, py + 4); g.lineTo(px + CELL - 4, py + CELL - 4); g.moveTo(px + CELL - 4, py + 4); g.lineTo(px + 4, py + CELL - 4); g.stroke(); }
         if (i === sel) { g.strokeStyle = '#fff'; g.lineWidth = 3; g.strokeRect(px + 1.5, py + 1.5, CELL - 3, CELL - 3); }
       }
+      // Perfect-town planner: each acre tinted by the game's own score, with the score and what to change beside the map.
+      function drawPlan() {
+        if (!PLAN.on) return;
+        const T = window.WW_PERFECT.town(s), tint = ['rgba(214,64,52,.32)', 'rgba(232,120,52,.28)', 'rgba(240,190,60,.24)', 'rgba(120,200,110,.18)', 'rgba(60,170,90,.08)'];
+        for (const a of T.acres) {
+          const x0 = (a.a & 3) * 16 * CELL, y0 = (a.a >> 2) * 16 * CELL, S = 16 * CELL;
+          g.fillStyle = tint[a.band]; g.fillRect(x0, y0, S, S);
+          g.font = `900 ${CELL * 2.4}px Nunito, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.45)'; g.strokeText(a.score, x0 + S / 2, y0 + S / 2);
+          g.fillStyle = a.band === 4 ? '#e9ffe4' : a.band === 3 ? '#fffbe0' : '#ffe2d8'; g.fillText(a.score, x0 + S / 2, y0 + S / 2);
+        }
+        planPanel(T);
+      }
       function drawAll() {
         for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) drawCell(x, y);
+        drawPlan();
         if (showGrid) { g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.5; for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(k * 16 * CELL, 0); g.lineTo(k * 16 * CELL, W); g.moveTo(0, k * 16 * CELL); g.lineTo(W, k * 16 * CELL); g.stroke(); } }
       }
       for (let ay = 0; ay < 4; ay++) for (let ax = 0; ax < 4; ax++) {
@@ -267,7 +269,7 @@
         const r = stage.getBoundingClientRect(); tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top) + 'px';
         if (painting) apply(c, e);
       });
-      cv.addEventListener('pointerup', () => { if (painting) { painting = false; drawAll(); } });
+      cv.addEventListener('pointerup', () => { if (painting) { painting = false; drawAll(); } else if (PLAN.on) drawAll(); });
       cv.addEventListener('pointerleave', () => { tip.hidden = true; });
 
       const TOOLS = [['inspect', '🔍', 'Inspect'], ['place', '🌱', 'Place'], ['erase', '🧽', 'Erase'], ['bury', '⛏️', 'Bury'], ['pick', '💧', 'Eyedrop'], ['replace', '🔁', 'Replace all']];
@@ -287,9 +289,23 @@
       const brushEl = h('div', { class: 'brush' });
       function drawBrush() { brushEl.replaceChildren(h('span', { class: 'em' }, itemEmoji(brush)), h('div', null, h('div', { style: { fontWeight: 750 } }, itemLabel(brush)), h('div', { class: 'muted mono', style: { fontSize: '11px' } }, `Brush · ${hex(brush)}`))); }
       brushEl.addEventListener('click', async () => { const v = await pickItem(brush, { title: 'Choose a brush item' }); if (v !== null) { brush = v; drawBrush(); tool = 'place'; drawTools(); } });
+      const planEl = h('div', { class: 'plan-panel' });
+      function planPanel(T) {
+        const quick = [[0x2A, '🌳', 'Tree'], [0x60, '🌲', 'Cedar'], [0x00, '🌷', 'Tulip'], [0x12, '🌹', 'Rose'], [0x06, '🌼', 'Pansy'], [0x0C, '🌸', 'Cosmos']];
+        planEl.replaceChildren(
+          h('div', { class: 'plan-head' }, h('b', null, T.perfect ? '🌟 Perfect town!' : `Town: ${T.word}`),
+            h('div', { class: 'muted' }, T.perfect ? 'Keep it this way for 15 days in a row for the Golden Can.' : `Perfect needs every acre at 95+ (${T.counts[3] + T.counts[4]}/16) and 8 at 101+ (${T.excellent}/8).`)),
+          h('div', { class: 'plan-quick' }, quick.map(([id, em, nm]) => h('button', { class: 'btn small' + (tool === 'place' && brush === id ? ' on' : ''), title: `Paint ${itemLabel(id)}`, onclick: () => { brush = id; tool = 'place'; drawTools(); drawBrush(); planPanel(window.WW_PERFECT.town(s)); sfx.pop(); } }, em, ' ', nm)),
+            h('button', { class: 'btn small' + (tool === 'erase' ? ' on' : ''), onclick: () => { tool = 'erase'; drawTools(); planPanel(window.WW_PERFECT.town(s)); sfx.pop(); } }, '🧽 Erase')),
+          h('div', { class: 'plan-acres' }, T.acres.filter(a => a.todo.length).sort((x, y) => x.score - y.score).map(a =>
+            h('div', { class: 'plan-acre b' + a.band }, h('b', null, `${String.fromCharCode(65 + (a.a >> 2))}-${(a.a & 3) + 1}`), h('span', { class: 'sc' }, a.score),
+              h('span', { class: 'muted' }, a.todo.join(' · ')))),
+            T.acres.every(a => !a.todo.length) ? h('div', { class: 'muted' }, 'Every acre is at 101 or more.') : null));
+      }
       drawTools(); drawBrush(); drawAll();
       return h('div', { class: 'map-wrap' }, stage, h('div', { class: 'tool-panel' },
         h('div', { class: 'card' }, toolsEl, brushEl),
+        h('div', { class: 'card' }, row('🌟 Perfect-town planner', 'Each acre scored the way the game does it, live as you paint.', switchInput(() => PLAN.on, v => { PLAN.on = v; if (!v) planEl.replaceChildren(); drawAll(); })), planEl),
         h('div', { class: 'card' }, info),
         h('div', { class: 'card' },
           row('Show item icons', null, switchInput(() => showEmoji, v => { showEmoji = v; drawAll(); })),

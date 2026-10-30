@@ -697,3 +697,48 @@ canvas.model3d:active { cursor: grabbing; }
 }
 @keyframes guidecloud { from { transform: translateX(0); } to { transform: translateX(110px); } }
 @media (prefers-reduced-motion: reduce) { .guide-sprout::after { animation: none; left: 6px; } }
+.plan-panel { padding: 0 12px 12px; display: grid; gap: 10px; }
+.plan-panel:empty { display: none; }
+.plan-head b { font-size: 14px; }
+.plan-head .muted { font-size: 12px; margin-top: 2px; }
+.plan-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-acres { display: grid; gap: 6px; max-height: 300px; overflow: auto; }
+.plan-acre { display: grid; grid-template-columns: 36px 34px 1fr; gap: 6px; align-items: baseline; font-size: 12px; padding: 6px 8px; border-radius: 10px; background: var(--card-2, #f6efdc); }
+.plan-acre .sc { font-weight: 900; }
+.plan-acre.b0 .sc, .plan-acre.b1 .sc { color: #c4452f; } .plan-acre.b2 .sc { color: #b07d10; } .plan-acre.b3 .sc { color: #3f8f4f; }
+.tmr-turnips { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.tmr-turnips .tt { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 10px; background: var(--card-2, #f6efdc); font-size: 12px; }
+.tmr-turnips .tt b { font-size: 15px; }
+.tmr-turnips .tt.past { opacity: .45; }
+.tmr-turnips .tt.best { background: #dff3d6; box-shadow: inset 0 0 0 2px #6dbd63; }
+.tmr-days { display: grid; gap: 6px; }
+.tmr-day { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px dashed #0001; }
+.tmr-day .d { display: flex; flex-direction: column; font-size: 12px; } .tmr-day .d b { font-size: 14px; }
+.tmr-day .e { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 640px) { .tmr-turnips { grid-template-columns: repeat(3, 1fr); } }
+.fl-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px #0003; vertical-align: -1px; margin-right: 4px; }
+.fl-goals { display: flex; flex-wrap: wrap; gap: 8px; }
+.fl-goal { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border-radius: 12px; border: 2px solid #0000; background: var(--card-2, #f6efdc); cursor: pointer; font: inherit; }
+.fl-goal.on { border-color: var(--leaf); } .fl-goal .muted { font-size: 11px; } .fl-goal.have { opacity: .8; }
+.fl-ways { display: grid; gap: 6px; margin-top: 12px; }
+.fl-way { display: flex; align-items: center; gap: 4px; font-size: 13px; padding: 6px 10px; border-radius: 10px; background: #fff8; }
+.fl-way .sp { flex: 1; }
+.fl-pairs { display: grid; gap: 10px; }
+.fl-pair { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed #0001; font-size: 13px; }
+.fl-resrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.fl-res { display: inline-flex; align-items: center; gap: 2px; padding: 3px 8px; border-radius: 99px; background: #fff9; font-size: 12px; }
+.fl-res.new { background: #fff1c2; box-shadow: inset 0 0 0 1.5px #e3b54a; }
+.fl-table-wrap { overflow-x: auto; }
+.fl-table { border-collapse: collapse; font-size: 11.5px; }
+.fl-table th, .fl-table td { padding: 5px 6px; border: 1px solid #0001; vertical-align: top; text-align: left; white-space: nowrap; }
+.fl-table td.dim { background: #0000000a; }
+.fl-cell { display: flex; align-items: center; }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.badge-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 14px; background: var(--card, #fffdf3); box-shadow: 0 3px 0 #0001; opacity: .62; }
+.badge-card.got { opacity: 1; box-shadow: 0 3px 0 #e2c57a, inset 0 0 0 2px #f1dc9b; }
+.badge-card .em { font-size: 26px; } .badge-card .muted { font-size: 11.5px; line-height: 1.35; }
+.vs-wrap { overflow-x: auto; }
+.vs-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.vs-table th, .vs-table td { padding: 7px 10px; border-bottom: 1px solid #0001; text-align: left; vertical-align: top; }
+.vs-table td.top { font-weight: 800; color: #2f7a45; }
+.vs-table td.top::after { content: " 👑"; }

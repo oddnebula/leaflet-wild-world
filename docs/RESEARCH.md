@@ -104,3 +104,12 @@ Scanned every call to the flag functions in main and all overlays, including C++
   (19, 20, 21, 0, 1, …, 19) and 22 for the trunk; data_ov003_0222f6a0 the weeds' palette (grass00–09).
 - After unbending, the acres still dip a little toward the south edge, up to 0.31 model units, identically in every
   acre; Leaflet adds that measured curve back.
+
+## Perfect town and flowers (2026-10-29)
+- Acre survey func_0204a1c0/func_02049e40, score func_0204a630: 100; trees (0x26–2A, 0x2F–5B, 0x5D–61, 0x66–6D,
+  0xC8–CF) outside 12–15 cost 2 each; weeds (0x21–24 only) from the third cost 1 each; junk (unburied class 1–4 items
+  except fruit, coconuts, shells, spoiled turnips and garbage) from the third cost 1 each; garbage 0x1320–22 costs 10;
+  a Rafflesia 50; flowers (≤0x1D except 0x1B, watered 0x8A–A3 and 0xA5) from the third add 1 each.
+  Bands (func_02049e1c): <75, <80, <95, <101, ≥101. Town rating (func_02049990): perfect when no acre is under 95 and
+  at least 8 are 101+.
+- Hybrids: func_020492fc reads data_020da300[kind][lo][hi] → weighted list of flower ids (extracted in js/views-garden.js).
