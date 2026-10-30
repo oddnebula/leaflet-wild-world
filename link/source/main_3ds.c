@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 
 #include "core.h"
+#include "qr.h"
 
 #define SOC_ALIGN 0x1000
 #define SOC_SIZE 0x100000
@@ -284,7 +285,9 @@ static Box row_box(int i) { return (Box){ 14, 34 + i * 40, 292, 38 }; }
 
 static void saves_list(bool touching, touchPosition tp) {
   int n; const LLSaveFile *l = ll_sd_list(&n);
-  text("Saves on the SD card", 160, 8, 0.55f, INK, CENTER, 0);
+  // A quick search looks only in the folders where saves were found before; X (or a tap up here) looks everywhere.
+  if (!listScan && ll_sd_quick()) { text("Saves in the usual folders", 18, 8, 0.5f, INK, LEFT, 0); text("\xEE\x80\x82 Look everywhere", 250, 10, 0.42f, LEAF, CENTER, 0); }
+  else text("Saves on the SD card", 160, 8, 0.55f, INK, CENTER, 0);
   if (listScan) {
     C2D_DrawCircleSolid(160, 110, 0, 6 + 3 * sinf(anim * 6), LEAF);
     char line[64]; snprintf(line, sizeof line, n ? "Looking\xE2\x80\xA6 %d found so far" : "Looking\xE2\x80\xA6", n);
@@ -400,11 +403,24 @@ static void bottom_screen(bool touching, touchPosition tp) {
       if (listOpen) { saves_list(touching, tp); break; }
       panel(14, 10, 292, 124, CARD);
       if (netOk) {
-        text("On your computer, open Leaflet,", 160, 18, 0.48f, MUTED, CENTER, 0);
-        text("choose Cartridge Sync and type:", 160, 34, 0.48f, MUTED, CENTER, 0);
-        rrect(34, 56, 252, 46, 14, C2D_Color32(0xEE, 0xF8, 0xE6, 0xFF));
-        text(ipText, 160, 63, 1.0f, LEAF, CENTER, 0);
-        text("Saves are only written after you press \xEE\x80\x80 here.", 160, 110, 0.42f, MUTED, CENTER, 0);
+        // A phone's camera opens Leaflet from this 3DS; a computer's Leaflet connects by the address.
+        static char qrFor[48] = ""; static uint8_t qr[LL_QR_SIZE][LL_QR_SIZE]; static bool qrOk = false;
+        char url[48]; snprintf(url, sizeof url, "http://%s:%d/", ipText, LL_PORT);
+        if (strcmp(url, qrFor)) { snprintf(qrFor, sizeof qrFor, "%s", url); qrOk = ll_qr(url, qr); }
+        if (qrOk) {
+          C2D_DrawRectSolid(22, 16, 0, 111, 111, WHITE);
+          for (int y = 0; y < LL_QR_SIZE; y++) for (int x = 0; x < LL_QR_SIZE; x++) {   // one rectangle per run of dark modules
+            if (!qr[y][x]) continue;
+            int e = x; while (e + 1 < LL_QR_SIZE && qr[y][e + 1]) e++;
+            C2D_DrawRectSolid(34 + x * 3, 28 + y * 3, 0, (e - x + 1) * 3, 3, INK); x = e;
+          }
+        }
+        text("Phone or tablet:", 220, 18, 0.46f, INK, CENTER, 0);
+        text("scan this to use Leaflet", 220, 34, 0.4f, MUTED, CENTER, 0);
+        text("Computer: in Cartridge Sync, type", 220, 58, 0.4f, MUTED, CENTER, 0);
+        rrect(142, 74, 156, 30, 10, C2D_Color32(0xEE, 0xF8, 0xE6, 0xFF));
+        text(ipText, 220, 79, 0.62f, LEAF, CENTER, 0);
+        text("Nothing is saved until you press \xEE\x80\x80.", 220, 110, 0.36f, MUTED, CENTER, 0);
       } else {
         text("Waiting for Wi-Fi", 160, 30, 0.75f, INK, CENTER, 0);
         text("To use Leaflet, connect the 3DS to the same network as your computer. The buttons below work without it.", 30, 62, 0.42f, MUTED, LEFT, 260);
@@ -467,6 +483,7 @@ int main(int argc, char **argv) {
       int n; const LLSaveFile *l = ll_sd_list(&n);
       if (listScan) { /* drawn once, then looked through below */ }
       else if ((down & KEY_B) || (tapped && hit(btnBack, lastTouch))) listOpen = false;
+      else if (ll_sd_quick() && ((down & KEY_X) || (tapped && lastTouch.py < 28 && lastTouch.px > 180))) { listScan = true; sel = first = 0; ll_sd_scan_begin_full(true); }
       else {
         if ((down & KEY_DOWN) && sel + 1 < n) sel++;
         if ((down & KEY_UP) && sel > 0) sel--;

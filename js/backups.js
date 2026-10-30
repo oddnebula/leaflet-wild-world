@@ -213,7 +213,7 @@
       const watchText = !settings.enabled ? 'Backups are off.' : !settings.watch ? 'Off.' : native ? (s ? `Watching ${s.fileName}: each time the game writes it, that version is kept.` : 'Opens a save to start watching it.')
         : APP.fileHandle ? `Watching ${APP.fileHandle.name} while this window is open.` : (s ? 'This browser can’t re-read the file you opened. Open it with the Open button in Chrome or Edge to watch it.' : 'Open a save to start watching it.');
       return [
-        section('Automatic backups', `${cache.length} kept · ${(total / 1048576).toFixed(1)} MB on this computer`),
+        section('Automatic backups', `${cache.length} kept · ${(total / 1048576).toFixed(1)} MB on ${UI.here}`),
         card(
           row('Back up automatically', 'Keeps a copy each time you open or save a town, and your unsaved edits every minute.', switchInput(() => settings.enabled, v => { settings.enabled = v; saveSettings(); startWatch(); refresh(); })),
           row('Watch the open save for game saves', watchText, switchInput(() => settings.watch, v => { settings.watch = v; saveSettings(); startWatch(); refresh(); })),

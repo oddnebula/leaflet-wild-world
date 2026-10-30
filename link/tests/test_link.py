@@ -286,5 +286,36 @@ p, cp, d = run(['--chip', 'eeprom']); code, _, b = req('POST', '/health'); check
 p, cp, d = run(['--slow', '0']); req('POST', '/health'); console(p, 'stop'); st = wait_end()
 check('health: stopping it is harmless', st['state'] in ('idle', 'done') and open(cp, 'rb').read() == orig, st); stop(p, d)
 
+def sd_json(q):   # the whole answer, once the search is done
+    for _ in range(500):
+        code, _, b = req('GET', q); j = json.loads(b)
+        if not j.get('scanning'): return j
+        q = '/sd'; time.sleep(0.02)
+def sd_full():
+    q = '/sd?full=1'
+    for _ in range(500):
+        code, _, b = req('GET', q); j = json.loads(b)
+        if not j.get('scanning'): return j
+        q = '/sd'; time.sleep(0.02)
+p, cp, d = run([], sd={'/roms/nds/saves/Wild World.sav': orig})
+j = sd_json('/sd?fresh=1'); memo = os.path.join(d, 'sd', '3ds', 'LeafletLink', 'folders.txt')
+check('folders: first search walks the card and remembers where saves are', [x['path'] for x in j['saves']] == ['/roms/nds/saves/Wild World.sav'] and not j.get('quick') and os.path.exists(memo) and open(memo).read() == '/roms/nds/saves\n', (j, os.path.exists(memo) and open(memo).read()))
+f = os.path.join(d, 'sd', 'games', 'ww.sav'); os.makedirs(os.path.dirname(f)); open(f, 'wb').write(orig)
+j = sd_json('/sd?fresh=1')
+check('folders: later searches look only there', j.get('quick') and [x['path'] for x in j['saves']] == ['/roms/nds/saves/Wild World.sav'], j)
+j = sd_json('/sd?full=1')
+check('folders: a full search finds the rest and remembers it', not j.get('quick') and sorted(x['path'] for x in j['saves']) == ['/games/ww.sav', '/roms/nds/saves/Wild World.sav'] and sorted(open(memo).read().split()) == ['/games', '/roms/nds/saves'], (j, open(memo).read()))
+os.remove(f); os.remove(os.path.join(d, 'sd', 'roms', 'nds', 'saves', 'Wild World.sav')); open(os.path.join(d, 'sd', 'moved.sav'), 'wb').write(orig)
+j = sd_json('/sd?fresh=1')
+check('folders: nothing left there, so the whole card is walked', not j.get('quick') and [x['path'] for x in j['saves']] == ['/moved.sav'] and open(memo).read() == '/\n', (j, open(memo).read()))
+stop(p, d)
+
+import gzip
+p, cp, d = run([]); code, hd, b = req('GET', '/')
+try: page = gzip.decompress(b).decode()
+except Exception: page = ''
+check('web: Leaflet served whole for phones', code == 200 and hd.get('Content-Encoding') == 'gzip' and 'LEAFLET_FROM_LINK' in page and page.rstrip().endswith('</html>') and req('GET', '/info')[0] == 200, (code, len(b)))
+check('web: listed in features', 'web' in json.loads(req('GET', '/info')[2]).get('features', [])); stop(p, d)
+
 print(f"\n{sum(1 for _, c in results if c)}/{len(results)} passed")
 sys.exit(0 if all(c for _, c in results) else 1)

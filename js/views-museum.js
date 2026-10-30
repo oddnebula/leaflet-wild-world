@@ -147,7 +147,7 @@
           h('button', { class: 'btn small', onclick: () => { w.list.forEach((_, i) => setNib(s, w, i, 0)); sfx.toggle(false); refresh(); } }, 'Empty wing'),
           isCritter && ps.length ? h('button', { class: 'btn small', onclick: () => { ps.forEach(p => w.list.forEach((_, i) => { if (nib(s, w, i)) setCaught(s, p, w.id, i, true); })); sfx.bell(); toast('Encyclopedias now include everything on display', '📖'); refresh(); } }, 'Sync encyclopedia') : null),
         cards.length ? h('div', { class: 'exhibits' }, cards) : h('div', { class: 'card' }, h('div', { class: 'empty-note' }, h('span', { class: 'em' }, '🦉'), 'Hoo… nothing matches that filter right now.')),
-        h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '10px' } }, 'Click a card to donate or remove it. Letters on a card show which residents have it in their encyclopedia; click them to toggle. Spawn data parsed from the game by DrewPag.')];
+        h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '10px' } }, `${UI.Click} a card to donate or remove it. Letters on a card show which residents have it in their encyclopedia; ${UI.click} them to toggle. Spawn data parsed from the game by DrewPag.`)];
     },
   });
 
@@ -311,7 +311,7 @@
       const overall = Math.floor(parts.reduce((x, y) => x + Math.min(1, y), 0) / parts.length * 1000) / 10;
       return [
         h('div', { class: 'museum-hero', style: { background: 'linear-gradient(135deg,#ffe7a0,#f6c25a)' } }, h('div', { class: 'owl' }, '🏆'),
-          h('div', { style: { flex: 1 } }, h('div', { class: 'mh-title' }, 'Town completion'), h('div', { class: 'mh-sub' }, 'Museum, music, home and more. Click any card to jump there.')),
+          h('div', { style: { flex: 1 } }, h('div', { class: 'mh-title' }, 'Town completion'), h('div', { class: 'mh-sub' }, `Museum, music, home and more. ${UI.Click} any card to jump there.`)),
           h('div', { class: 'mh-score', title: 'Every goal on this page counts the same; each resident’s encyclopedia, catalog, gyroids, pics and golden tools are averaged.' }, h('b', null, `${overall}%`), h('span', null, overall >= 100 ? 'A perfect town!' : 'complete'))),
         section('Town'),
         h('div', { class: 'goal-grid' },

@@ -124,7 +124,7 @@
 
       return [section('Save health'), health,
         section('Every region', 'From the decompiled save layout'),
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) 1fr', gap: '14px', alignItems: 'start' } },
+        h('div', { class: 'adv-split' },
           h('div', { class: 'card' }, list),
           h('div', { class: 'card' }, h('div', { class: 'row' }, h('div', { class: 'row-label' }, h('div', { class: 't' }, open[2], h('span', { class: 'off' }, `${hex(open[0], 5)} · ${open[1]} bytes`)))), hexEl, pager)),
         section('Raw write'), poke,

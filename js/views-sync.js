@@ -67,7 +67,9 @@
 
   // ---------- state ----------
   // phase: off · connecting · ready · review · sending · result
-  const S = { addr: store.get(), phase: 'off', info: null, err: '', note: '', cart: null, cartAt: 0, reading: false, src: 0, file: null, fileName: '', replaceOk: false, job: 0, status: null, sent: null, after: '' };
+  // Opened from Leaflet Link itself (a phone scanning the 3DS's QR code): this page's own address is the 3DS.
+  const PHONE = !!window.LEAFLET_PHONE, FROM_LINK = !!window.LEAFLET_FROM_LINK;
+  const S = { addr: FROM_LINK ? location.host : store.get(), phase: 'off', info: null, err: '', note: '', cart: null, cartAt: 0, reading: false, src: 0, file: null, fileName: '', replaceOk: false, job: 0, status: null, sent: null, after: '' };
   let root = null, infoTimer = 0;
   const paint = () => { if (root && root.isConnected) root.replaceChildren(...body()); };
   const fail = (e, phase) => { S.err = e.message || String(e); if (phase) S.phase = phase; sfx.error(); paint(); };
@@ -84,6 +86,7 @@
       sfx.bell(); paint();
       watchInfo();
       if (j.card.ready) readCart().then(diaryFromSD); else diaryFromSD();
+      autoUpdateLink();
       return true;
     } catch (e) { if (!quiet) fail(e, 'off'); return false; }
   }
@@ -129,6 +132,15 @@
   }
   function downloadApp() { download('LeafletLink.3dsx', appBytes()); sfx.pop(); }
 
+  // Everything updates together: when this Leaflet carries a newer Leaflet Link than the 3DS has, it sends it once
+  // the card has been read (once per version per session). The 3DS still asks before installing it.
+  const autoTried = new Set();
+  function autoUpdateLink() {
+    if (PHONE || !APPB || !S.info || !newer(APPB.version, S.info.version) || autoTried.has(APPB.version) || U.state) return;
+    autoTried.add(APPB.version);
+    const go = () => { if (S.phase !== 'ready' || !S.info) return; if (S.reading || HC.job) { setTimeout(go, 1500); return; } updateLink(); };
+    setTimeout(go, 2500);
+  }
   async function updateLink() {
     clearInterval(infoTimer);
     const job = (Math.random() * 1e9) >>> 0;
@@ -441,16 +453,17 @@
     throw new Error('The save didn’t arrive intact, three times in a row. Move the 3DS closer to your router and try again.');
   }
   let listing = null;
-  function listSD(quiet) {
+  // full: the whole SD card. Leaflet Link 2.0 otherwise looks only in the folders where it found saves before (quick).
+  function listSD(quiet, full) {
     if (!feature('sd')) return Promise.resolve();
     if (listing) return listing;   // one look at a time
     T.busy = true; T.err = ''; if (!quiet) paint();
     // A busy 3DS (say, waiting for A) keeps the list it had.
     // Leaflet Link 1.3.1 looks through the SD card a slice at a time and says "scanning" until it's done.
     listing = (async () => {
-      let j = await json('/sd?fresh=1', {}, 30000);
+      let j = await json(full ? '/sd?full=1' : '/sd?fresh=1', {}, 30000);
       for (let i = 0; j.scanning && i < 300; i++) { await new Promise(r => setTimeout(r, 300)); j = await json('/sd', {}, 30000); }
-      T.list = j.saves;
+      T.list = j.saves; T.quick = !!j.quick;
     })().catch(e => { if (!T.list) T.err = e.message; }).then(() => { T.busy = false; listing = null; paint(); });
     return listing;
   }
@@ -551,7 +564,8 @@
       T.err || T.msg ? h('div', { class: 'sync-msg ' + (T.err || T.bad ? 'bad' : 'ok'), style: { margin: rows.length ? '10px 16px' : '0 0 10px' } }, T.err || T.msg) : null,
       h('div', { style: { padding: rows.length ? '10px 16px' : 0 } }, h('div', { class: 'btn-row' },
         h('button', { class: 'btn small', disabled: T.busy, onclick: () => { T.msg = ''; listSD(); } }, T.busy ? 'Looking…' : 'Look again'),
-        h('span', { class: 'fine' }, 'Versions found here also join the Town Diary.'))))];
+        T.quick && feature('sdfull') ? h('button', { class: 'btn small', disabled: T.busy, title: 'Leaflet Link looked only in the folders where it found saves before. This looks through the whole SD card.', onclick: () => { T.msg = ''; listSD(false, true); } }, 'Look everywhere') : null,
+        h('span', { class: 'fine' }, T.quick ? 'Looked in the usual folders. Versions found here also join the Town Diary.' : 'Versions found here also join the Town Diary.'))))];
   }
 
   // ---------- game card health check (Leaflet Link 1.3) ----------
@@ -730,9 +744,9 @@
       h('div', { class: 'sync-link' + (on ? ' on' : '') },
         h('span', { class: 'node' }, h('b', null, '🎮'), h('i', null, 'Game card')),
         h('span', { class: 'wire' }, h('span'), h('span'), h('span')),
-        h('span', { class: 'node' }, h('b', null, '🍃'), h('i', null, 'Leaflet')),
-        h('span', { class: 'wire' }, h('span'), h('span'), h('span')),
-        h('span', { class: 'node' }, h('b', null, '🖥️'), h('i', null, 'Emulator'))));
+        h('span', { class: 'node' }, h('b', null, PHONE ? '📱' : '🍃'), h('i', null, PHONE ? 'This phone' : 'Leaflet')),
+        PHONE ? null : h('span', { class: 'wire' }, h('span'), h('span'), h('span')),
+        PHONE ? null : h('span', { class: 'node' }, h('b', null, '🖥️'), h('i', null, 'Emulator'))));
   }
   function errBox() { return S.err ? h('div', { class: 'sync-msg bad' }, '⚠️ ', S.err) : S.note ? h('div', { class: 'sync-msg' }, '↩️ ', S.note) : null; }
 
@@ -760,7 +774,9 @@
     return h('div', { class: 'card pad sync-connect' },
       h('ol', { class: 'sync-steps' },
         h('li', null, h('b', null, 'Insert your Wild World game card, '), 'then open Leaflet Link from the Homebrew Launcher.'),
-        native ? h('li', null, h('b', null, 'Click Find my 3DS, '), 'or type the address the 3DS shows. Both need to be on the same Wi-Fi.')
+        FROM_LINK ? h('li', null, h('b', null, 'Keep Leaflet Link open. '), 'This page came from your 3DS, so it connects by itself.')
+          : PHONE ? h('li', null, h('b', null, 'Scan the QR code on the 3DS’s lower screen '), 'with this phone’s camera, or type the address it shows. Both need to be on the same Wi-Fi.')
+          : native ? h('li', null, h('b', null, 'Click Find my 3DS, '), 'or type the address the 3DS shows. Both need to be on the same Wi-Fi.')
           : h('li', null, h('b', null, 'Type the address the 3DS shows. '), 'Both need to be on the same Wi-Fi.')),
       h('div', { class: 'sync-row' },
         native ? h('button', { class: 'btn leaf big', disabled: busy || S.finding, onclick: () => findLink(false) }, S.finding ? 'Looking for your 3DS…' : '🔎 Find my 3DS') : null,
@@ -818,6 +834,23 @@
       h('button', { class: 'btn leaf', onclick: updateLink }, U.state === 'failed' ? 'Try again' : 'Update over Wi-Fi'));
   }
 
+  // Leaflet on a phone: Leaflet Link 1.4 serves Leaflet itself, so a phone on the same Wi-Fi scans this and opens it
+  // from the 3DS (a page from the internet isn't allowed to talk to the 3DS; one the 3DS serves is).
+  let showPhone = false;
+  function phoneCard() {
+    if (PHONE || !feature('web')) return null;
+    const url = `${base(S.addr)}/`;
+    if (!showPhone) return h('div', { class: 'sync-install-mini' }, 'Want Leaflet on your phone or tablet too? ', h('button', { class: 'btn small', onclick: () => { showPhone = true; sfx.open(); paint(); } }, '📱 Show a QR code'));
+    const code = window.QR && QR.svg(url, `QR code for ${url}`);
+    return h('div', { class: 'card pad sync-phone' },
+      code ? h('div', { class: 'sync-qr' }, code) : null,
+      h('div', null, h('b', null, '📱 Leaflet on your phone'),
+        h('p', { class: 'muted', style: { margin: '6px 0' } }, 'Point your phone’s camera at the code (or at the one on the 3DS’s lower screen), or type this address in its browser:'),
+        h('code', { class: 'sync-url' }, url),
+        h('p', { class: 'fine' }, 'Leaflet comes straight from Leaflet Link on your 3DS, so both need to be on the same Wi-Fi and Leaflet Link needs to stay open. Your phone keeps its own backups.'),
+        h('button', { class: 'btn small', onclick: () => { showPhone = false; paint(); } }, 'Hide')));
+  }
+
   function statusCard() {
     const c = S.info.card, p = S.info.power;
     const dot = ok => h('span', { class: 'sync-dot' + (ok ? ' ok' : ok === null ? ' wait' : '') });
@@ -849,8 +882,8 @@
         h('div', { class: 'sync-tiles' },
           tile('📖', 'Open in Leaflet', 'Edit the town on the card. Save to a file as usual.', openInLeaflet, !c.save),
           native ? tile('🎮', 'Play on melonDS', 'Starts melonDS with this town and brings it back to the card when you’re done.', playOnEmu, !c.save || E.phase === 'playing' || E.phase === 'starting' || (E.phase === 'back' && E.session)) : null,
-          tile('💾', 'Save for an emulator', 'A .sav for melonDS, DeSmuME or another emulator.', forEmulator, !c.save),
-          tile('📤', 'Send to the game card', 'Put a town from Leaflet or an emulator back on the card.', () => startReview(), !S.info.card.writable)),
+          PHONE ? tile('💾', 'Save a copy', 'This town as a .sav file, to keep or to play on another system.', forEmulator, !c.save) : tile('💾', 'Save for an emulator', 'A .sav for melonDS, DeSmuME or another emulator.', forEmulator, !c.save),
+          tile('📤', 'Send to the game card', PHONE ? 'Put a town from Leaflet back on the card.' : 'Put a town from Leaflet or an emulator back on the card.', () => startReview(), !S.info.card.writable)),
         // Why sending is off. The Sanyo chip (62 16 00) in some Wild World cards needs Leaflet Link 1.3.2 or newer.
         !S.info.card.writable ? h('div', { class: 'sync-msg bad', style: { marginTop: '10px' } }, '⚠️ ',
           S.info.card.chipId === '621600' && newer('1.3.2', S.info.version) ? `Sending is off because Leaflet Link ${S.info.version} doesn’t know this card’s save chip. Update Leaflet Link (above) to 1.3.2 or newer and sending works.`
@@ -963,16 +996,18 @@
   function body() {
     const out = [hero()];
     if (helperLost && !mac) out.push(h('div', { class: 'callout', style: { marginBottom: '12px' } }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'Leaflet Helper has stopped'), 'Close this window and open Start Leaflet again to use melonDS, SD cards and finding your 3DS. Everything else here still works.')));
-    out.push(...emuCard());
-    if (S.phase === 'off' || S.phase === 'connecting' || !S.info) out.push(...installCard(), section('Connect to your 3DS'), connectCard(), ...wfcCard());
+    // Phones skip what needs a computer: melonDS, SD card readers and installing Leaflet Link.
+    const pc = cards => PHONE ? [] : cards;
+    out.push(...pc(emuCard()));
+    if (S.phase === 'off' || S.phase === 'connecting' || !S.info) out.push(...pc(installCard()), section('Connect to your 3DS'), connectCard(), ...pc(wfcCard()));
     else {
-      out.push(statusCard(), updateCard());
+      out.push(statusCard(), phoneCard(), pc(updateCard()));
       if (S.phase === 'sending') out.push(progressCard());
       else if (S.phase === 'result') out.push(resultCard());
       else if (S.phase === 'review') out.push(...reviewCard());
-      else out.push(healthCard(), ...[cartCard()].flat().filter(Boolean), errBox(), ...consoleSDCard(), ...wfcCard());
+      else out.push(healthCard(), ...[cartCard()].flat().filter(Boolean), errBox(), ...consoleSDCard(), ...pc(wfcCard()));
     }
-    if (!['sending', 'result', 'review'].includes(S.phase)) out.push(...sdCard());
+    if (!['sending', 'result', 'review'].includes(S.phase)) out.push(...pc(sdCard()));
     out.push(h('div', { class: 'fine sync-fine' }, 'Leaflet Link only reads and writes the save on your own game card. It doesn’t copy the game itself. Writing only happens after you confirm on the 3DS.'));
     return out.filter(Boolean);   // some cards return null when there's nothing to show
   }

@@ -5,7 +5,8 @@
 
 ifeq ($(MAKECMDGOALS),sim)
 sim:
-	$(CC) -O2 -Wall -Wextra -Wno-unused-parameter -o host/leaflet-link-sim source/core.c host/sim.c
+	python3 ../tools/build_link_web.py
+	$(CC) -O2 -Wall -Wextra -Wno-unused-parameter -o host/leaflet-link-sim source/core.c source/webapp.c host/sim.c
 .PHONY: sim
 else
 
@@ -14,6 +15,7 @@ ifneq ($(words $(CURDIR)),1)
 TMPBUILD := /tmp/leaflet-link-build
 .PHONY: all clean
 all:
+	@python3 ../tools/build_link_web.py
 	@rm -rf $(TMPBUILD) && mkdir -p $(TMPBUILD)
 	@cp -R Makefile icon.png source $(TMPBUILD)/
 	@$(MAKE) --no-print-directory -C $(TMPBUILD)
@@ -60,6 +62,7 @@ export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh
 
 .PHONY: all clean
 all: $(BUILD)
+	@if [ -f $(CURDIR)/../tools/build_link_web.py ]; then python3 $(CURDIR)/../tools/build_link_web.py; fi
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 	@-python3 $(CURDIR)/../tools/build_link_js.py
 $(BUILD):

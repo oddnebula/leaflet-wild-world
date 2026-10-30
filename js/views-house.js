@@ -226,7 +226,7 @@
         section('Rooms', built ? `${count} pieces in the ${ROOMS[room].toLowerCase()}` : 'Not built yet'), roomTabs,
         h('div', { class: 'card pad' },
           h('div', { class: 'btn-row', style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
-            h('span', { class: 'muted', style: { fontSize: '12px' } }, show3d ? 'Arrange in 3D: drag furniture to move it, or pick a piece and use the arrow keys' : 'Click a spot to edit it · drag to move · right-click to spin or clear'),
+            h('span', { class: 'muted', style: { fontSize: '12px' } }, show3d ? (window.LEAFLET_PHONE ? 'Arrange in 3D: drag furniture to move it' : 'Arrange in 3D: drag furniture to move it, or pick a piece and use the arrow keys') : `${UI.Click} a spot to edit it · drag to move · ${UI.rclick} to spin or clear`),
             h('span', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
               h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, '3D view', switchInput(() => show3d, v => { show3d = v; refresh(); })),
               show3d ? null : h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12.5px', fontWeight: 650 } }, 'Show outside the walls', switchInput(() => showOutside, v => { showOutside = v; refresh(); })))),

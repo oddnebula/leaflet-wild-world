@@ -1,4 +1,5 @@
 /* Leaflet: a cozy, mac-style Wild World save editor. */
+[hidden] { display: none !important; }
 :root {
   --font: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -618,3 +619,13 @@ textarea.field { height: auto; padding: 8px 10px; resize: vertical; line-height:
   .btn.small { min-height: 38px; }
   .kbd-hint, .kbd { display: none; }
 }
+
+/* Leaflet on a phone (Cartridge Sync's QR code) */
+.sync-phone { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.sync-qr { width: 168px; height: 168px; flex: none; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.sync-qr svg { width: 100%; height: 100%; display: block; }
+.sync-phone > div:last-child { flex: 1; min-width: 220px; }
+.sync-url { display: inline-block; font-size: 15px; padding: 4px 10px; border-radius: 8px; background: var(--chip, rgba(0,0,0,.05)); user-select: all; word-break: break-all; }
+/* Advanced: the field list beside the hex view, stacked on narrow screens. */
+.adv-split { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .adv-split { grid-template-columns: minmax(0, 1fr); } }

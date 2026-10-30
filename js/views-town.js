@@ -130,7 +130,7 @@
           row('Still the first day', 'On the first day of a new town no visitors come and some events wait.', switchInput(() => s.u8(0x15FC8), v => s.set8(0x15FC8, v ? 1 : 0)), 0x15FC8),
           row('Last session ended', s.u8(0x15FDE) === 0x1C ? 'Without saving: Mr. Resetti will be waiting.' : s.u8(0x15FDE) === 2 ? 'With a proper save.' : `State ${s.u8(0x15FDE)}.`,
             selectInput([[2, 'Saved properly'], [0x1C, 'Quit without saving']], () => s.u8(0x15FDE), v => { s.set8(0x15FDE, v); refresh(); }, { width: 'w-m' }), 0x15FDE, { risk: 'med', why: '“Quit without saving” makes Mr. Resetti lecture you next time.' })),
-        section('Groundskeeping', 'One-click chores'),
+        section('Groundskeeping', 'Quick chores'),
         card(...CHORES.map(([em, label, desc, fn]) => row(`${em}  ${label}`, desc, h('button', { class: 'btn small', onclick: async () => { const msg = fn(s); sfx.bell(); toast(msg, em); refresh(); } }, 'Do it')))),
         section('Town event flags', '32 town-wide flags at 0x15FD8'),
         h('div', { class: 'callout' }, h('span', { class: 'em' }, '🧪'), h('div', null, h('b', null, 'These change what happens in-game'), 'Some are cleared every day by the game. Turning a “received” flag off can make a gift arrive again.')),
@@ -228,7 +228,7 @@
         const a = acreAt(ax, ay);
         if (!imgs[a] && window.WW_ACRE_IMAGES[a]) { const im = new Image(); im.onload = () => drawAll(); im.src = window.WW_ACRE_IMAGES[a]; imgs[a] = im; }
       }
-      const info = h('div', { class: 'row-label', style: { padding: '12px' } }, h('div', { class: 'd' }, 'Hover or click a spot to see what’s there.'));
+      const info = h('div', { class: 'row-label', style: { padding: '12px' } }, h('div', { class: 'd' }, window.LEAFLET_PHONE ? 'Tap a spot to see what’s there.' : 'Hover or click a spot to see what’s there.'));
       function showInfo(i) {
         const id = s.u16(MAP + i * 2), a = i >> 8, x = (a % 4) * 16 + (i & 15), y = (a >> 2) * 16 + ((i >> 4) & 15);
         info.replaceChildren(h('div', { class: 't', style: { fontSize: '15px' } }, itemEmoji(id), ' ', itemLabel(id)),
@@ -343,7 +343,7 @@
           h('div', { class: 'sheet-head' }, h('div', { class: 'top' }, h('h3', null, `Acre ${i % 6 + 1}, row ${((i / 6) | 0) + 1}`), h('button', { class: 'btn', onclick: close }, 'Done'))), body));
       }
       return [h('div', { class: 'callout' }, h('span', { class: 'em' }, '⚠️'), h('div', null, h('b', null, 'Acre edits can break a town'), 'Each building acre (town hall, museum, shop, gate, your house) must appear exactly once, rivers must line up, and the outer ring must stay cliffs, waterfall and ocean. Items sitting on an acre you replace stay where they are, even if that spot is now water.')),
-        section('Layout', 'Click an acre to swap it'), h('div', { class: 'card' }, grid),
+        section('Layout', `${UI.Click} an acre to swap it`), h('div', { class: 'card' }, grid),
         section('Raw acre IDs'), card(row('All 36 acre IDs', 'Row by row from the top-left, in hex. Paste a layout from another town here.',
           textInput(() => [...s.bytes(ACRES, 36)].map(b => b.toString(16).padStart(2, '0')).join(' '), UI.guard('acres', 'Change acres?', 'Acres decide the shape of the land: cliffs, rivers, the beach and where buildings sit. Rivers that don’t connect, a missing town hall or two copies of one building can crash the game or leave you stuck. Keep your backup handy and change one acre at a time.', v => {
             const bytes = v.trim().split(/[\s,]+/).map(x => parseInt(x, 16));

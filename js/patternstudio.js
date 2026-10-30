@@ -192,7 +192,7 @@
       h('div', { class: 'ps-side' },
         h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } }, h('div', { class: 'ps-prev' }, preview),
           h('div', null, h('div', { style: { fontWeight: 800, fontSize: '16px' } }, opts.title || 'Pattern'),
-            h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Draw with the tools below the canvas. Alt-click picks a color; ' + UI.mod + 'Z undoes, add Shift to redo.'),
+            h('div', { class: 'muted', style: { fontSize: '12px' } }, window.LEAFLET_PHONE ? 'Draw with your finger, using the tools below the canvas.' : 'Draw with the tools below the canvas. Alt-click picks a color; ' + UI.mod + 'Z undoes, add Shift to redo.'),
             h('label', { class: 'ps-check' }, UI.switchInput(() => prefs.tiled, v => { prefs.tiled = v; draw(); }), 'Tiled preview'))),
         h('div', null, label('COLORS'), sw),
         h('div', null, label('LAYERS (flattened into the one picture the game keeps)'), layerList, layerBtns),

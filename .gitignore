@@ -13,3 +13,4 @@ link/*.smdh
 link/*.elf
 link/host/leaflet-link-sim
 link/host/sim-sd/
+link/source/webapp.c

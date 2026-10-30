@@ -521,9 +521,13 @@ static int newest_first(const void *a, const void *b) {
 
 // The search runs a slice at a time (ll_tick), so the screen keeps drawing and Leaflet keeps getting answers while a
 // big SD card is looked through. It walks the backups folder first, then the card itself, with one open folder per
-// level.
+// level. The folders where it found saves are remembered (LL_FOLDERS_FILE), so later searches look only in those
+// (quick: a big card takes a while to walk); if nothing is there any more, or for a full search, it walks the card.
 #define SCAN_DEPTH 6
-static struct { bool active; int depth; DIR *dirs[SCAN_DEPTH + 1]; size_t lens[SCAN_DEPTH + 1]; char rel[200]; uint64_t done; } scan;
+#define MEMO_MAX 16
+#define LL_FOLDERS_FILE "/3ds/LeafletLink/folders.txt"
+enum { PH_BACKUPS, PH_MEMO, PH_CARD };
+static struct { bool active, full, quick; int depth, phase, memoN, memoAt; DIR *dirs[SCAN_DEPTH + 1]; size_t lens[SCAN_DEPTH + 1]; char rel[200]; uint64_t done; char memo[MEMO_MAX][160]; } scan;
 
 static bool scan_push(size_t len) {
   char full[300];
@@ -534,15 +538,50 @@ static bool scan_push(size_t len) {
   return true;
 }
 
-void ll_sd_scan_begin(void) {
+static void memo_load(void) {
+  char full[300], line[200]; full_path(full, sizeof full, LL_FOLDERS_FILE);
+  FILE *f = fopen(full, "r");
+  scan.memoN = 0;
+  if (!f) return;
+  while (scan.memoN < MEMO_MAX && fgets(line, sizeof line, f)) {
+    line[strcspn(line, "\r\n")] = 0;
+    if (line[0] == '/' && strlen(line) < 160 && !strstr(line, "..")) snprintf(scan.memo[scan.memoN++], 160, "%s", line);
+  }
+  fclose(f);
+}
+// After a walk of the whole card: the folders that held saves (not Leaflet Link's own backups).
+static void memo_save(void) {
+  char dirs[MEMO_MAX][160]; int n = 0;
+  for (int i = 0; i < sdN && n < MEMO_MAX; i++) {
+    if (sdList[i].backup) continue;
+    char d[160]; snprintf(d, sizeof d, "%.159s", sdList[i].path);
+    char *slash = strrchr(d, '/'); if (!slash) continue;
+    if (slash == d) slash[1] = 0; else *slash = 0;
+    bool seen = false; for (int k = 0; k < n; k++) if (!strcmp(dirs[k], d)) seen = true;
+    if (!seen) snprintf(dirs[n++], 160, "%s", d);
+  }
+  if (!n) return;   // nothing to remember (and no folder made on a card with no saves)
+  make_dirs("/3ds/LeafletLink");
+  char full[300]; full_path(full, sizeof full, LL_FOLDERS_FILE);
+  FILE *f = fopen(full, "w");
+  if (!f) return;
+  for (int k = 0; k < n; k++) fprintf(f, "%s\n", dirs[k]);
+  fclose(f);
+}
+
+void ll_sd_scan_begin_full(bool full) {
   while (scan.active && scan.depth >= 0) closedir(scan.dirs[scan.depth--]);
   sdN = sdVisited = 0;
   memset(&scan, 0, sizeof scan);
-  scan.active = true; scan.depth = -1;
-  // Leaflet Link's own backups (depth 0, marked by the folder) go first; the walk of the card starts when they're done.
+  scan.active = true; scan.depth = -1; scan.full = full;
+  if (!full) memo_load();
+  // Leaflet Link's own backups (depth 0) go first; then the remembered folders, or the walk of the card.
+  scan.phase = PH_BACKUPS;
   snprintf(scan.rel, sizeof scan.rel, "%s", LL_BACKUP_DIR);
-  if (!scan_push(strlen(scan.rel))) { scan.rel[0] = 0; scan_push(0); }
+  if (!scan_push(strlen(scan.rel))) scan.rel[0] = 0;   // no backups yet: the next step moves on
 }
+void ll_sd_scan_begin(void) { ll_sd_scan_begin_full(false); }
+bool ll_sd_quick(void) { return scan.quick; }
 
 bool ll_sd_scanning(void) { return scan.active; }
 
@@ -553,13 +592,26 @@ bool ll_sd_scan_step(uint32_t ms) {
   while (plat_ms() < until || !ms) {
     if (scan.depth < 0 || sdN >= LL_SD_MAX || sdVisited >= 6000) {
       while (scan.depth >= 0) closedir(scan.dirs[scan.depth--]);
-      // After the backups folder, the card itself.
-      if (scan.lens[0] && !strcmp(scan.rel, LL_BACKUP_DIR) && sdN < LL_SD_MAX && sdVisited < 6000) { scan.rel[0] = 0; memset(scan.lens, 0, sizeof scan.lens); if (scan_push(0)) continue; }
+      bool room = sdN < LL_SD_MAX && sdVisited < 6000;
+      memset(scan.lens, 0, sizeof scan.lens);
+      // After the backups folder: the remembered folders, one at a time (just their own files), or the whole card.
+      if (room && scan.phase == PH_BACKUPS) {
+        scan.phase = scan.memoN ? PH_MEMO : PH_CARD; scan.memoAt = 0;
+        if (scan.phase == PH_CARD) { scan.rel[0] = 0; if (scan_push(0)) continue; }
+      }
+      if (room && scan.phase == PH_MEMO) {
+        bool next = false;
+        while (scan.memoAt < scan.memoN && !next) { snprintf(scan.rel, sizeof scan.rel, "%s", scan.memo[scan.memoAt++]); next = scan_push(strlen(scan.rel)); }
+        if (next) continue;
+        bool any = false; for (int i = 0; i < sdN; i++) if (!sdList[i].backup) any = true;
+        if (any) scan.quick = true;
+        else { scan.phase = PH_CARD; scan.rel[0] = 0; if (scan_push(0)) continue; }   // nothing there any more: the whole card
+      } else if (room && scan.phase == PH_CARD) memo_save();
       scan.active = false; scan.done = plat_ms();
       qsort(sdList, sdN, sizeof *sdList, newest_first);
       return true;
     }
-    bool inBackups = !strncmp(scan.rel, LL_BACKUP_DIR, strlen(LL_BACKUP_DIR)) && scan.lens[0];
+    bool inBackups = scan.phase == PH_BACKUPS;
     size_t len = scan.lens[scan.depth];
     struct dirent *de = readdir(scan.dirs[scan.depth]);
     if (!de) { closedir(scan.dirs[scan.depth--]); if (scan.depth >= 0) scan.rel[scan.lens[scan.depth]] = 0; continue; }
@@ -572,7 +624,7 @@ bool ll_sd_scan_step(uint32_t ms) {
     struct stat sb;
     bool pushed = false;
     if (!stat(child, &sb)) {
-      if (S_ISDIR(sb.st_mode) && !inBackups) {
+      if (S_ISDIR(sb.st_mode) && !inBackups && scan.phase == PH_CARD) {
         bool skip = false;
         for (int i = 0; scan.depth == 0 && SKIP[i]; i++) if (!strcasecmp(n, SKIP[i])) skip = true;
         if (!skip && scan.depth < 5) pushed = scan_push(len + 1 + l);
@@ -829,7 +881,12 @@ static void udp_poll(void) {
     sendto(usock, reply, (size_t)k, 0, (struct sockaddr *)&from, fl);
   }
 }
-static struct { int fd; uint8_t *in; size_t inLen, need, hdrEnd; uint8_t *out; size_t outLen, sent; uint64_t t, closing; char ip[48]; } conn = { .fd = -1 };
+// A response is conn.out (headers, and a body that fits), then optionally ext: a large body sent straight from where
+// it already is (Leaflet's page, below).
+static struct { int fd; uint8_t *in; size_t inLen, need, hdrEnd; uint8_t *out; size_t outLen, sent; const uint8_t *ext; size_t extLen; uint64_t t, closing; char ip[48]; } conn = { .fd = -1 };
+// Leaflet itself, one gzipped page (webapp.c, made by tools/build_link_web.py), for phones and tablets on the same Wi-Fi.
+extern const uint8_t ll_web[];
+extern const size_t ll_web_len;
 
 bool ll_net_start(void) {
   if (lsock >= 0) return true;
@@ -870,7 +927,13 @@ static void respond(int code, const char *type, const uint8_t *body, size_t n, c
     "Access-Control-Expose-Headers: X-Leaflet-CRC32, X-Leaflet-Card\r\n%s\r\n",
     code, text, type, (unsigned)n, extra ? extra : "");
   if (n) memcpy(conn.out + h, body, n);
-  conn.outLen = h + n; conn.sent = 0;
+  conn.outLen = h + n; conn.sent = 0; conn.ext = NULL; conn.extLen = 0;
+}
+static void send_web(void) {
+  int h = snprintf((char *)conn.out, OUT_CAP,
+    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Encoding: gzip\r\nContent-Length: %u\r\nConnection: close\r\n"
+    "Cache-Control: no-cache\r\nX-Content-Type-Options: nosniff\r\n\r\n", (unsigned)ll_web_len);
+  conn.outLen = (size_t)h; conn.sent = 0; conn.ext = ll_web; conn.extLen = ll_web_len;
 }
 static void respond_json(int code, const char *json) { respond(code, "application/json", (const uint8_t *)json, strlen(json), NULL); }
 static void respond_error(int code, const char *why) {
@@ -888,7 +951,7 @@ static void send_info(void) {
   char pw[120] = ""; bool power = plat_power_ok(pw, sizeof pw); char pj[160]; json_str(pj, sizeof pj, pw);
   char clk[32]; plat_clock(clk, sizeof clk);
   snprintf(j, sizeof j,
-    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\"],\"discovery\":%s,"
+    "{\"app\":\"Leaflet Link\",\"version\":\"%s\",\"protocol\":%d,\"state\":\"%s\",\"clock\":\"%s\",\"features\":[\"sd\",\"health\",\"web\",\"sdfull\"],\"discovery\":%s,"
     "\"card\":{\"present\":%s,\"ds\":%s,\"title\":%s,\"code\":%s,\"ready\":%s,\"writable\":%s,\"chipId\":\"%02X%02X%02X\",\"size\":%u,\"why\":%s},"
     "\"power\":{\"ok\":%s,\"why\":%s}}",
     LL_VERSION, LL_PROTOCOL, STATE_NAMES[st.state], clk, usock >= 0 ? "true" : "false", card.present ? "true" : "false", card.ds ? "true" : "false", t, c,
@@ -922,11 +985,12 @@ static void wall_text(int64_t t, char *out, size_t cap) {
 
 // Starts a search unless one is running or just finished; answers with what's been found so far. Leaflet asks again
 // while "scanning" is true.
-static void send_sd_list(bool fresh) {
+// full: the whole card, not just the folders where saves were found before.
+static void send_sd_list(bool fresh, bool full) {
   if (!free_for_job()) { respond_error(409, "Leaflet Link is busy. Try again when the 3DS says it's done."); return; }
-  if (!scan.active && (fresh || !scan.done || plat_ms() - scan.done > 5000)) ll_sd_scan_begin();
+  if ((full && !(scan.active && scan.full)) || (!scan.active && (fresh || !scan.done || plat_ms() - scan.done > 5000))) ll_sd_scan_begin_full(full);
   static char j[LL_SD_MAX * 700 + 64];
-  size_t k = (size_t)snprintf(j, sizeof j, "{\"scanning\":%s,\"saves\":[", scan.active ? "true" : "false");
+  size_t k = (size_t)snprintf(j, sizeof j, "{\"scanning\":%s,\"quick\":%s,\"saves\":[", scan.active ? "true" : "false", scan.quick ? "true" : "false");
   for (int i = 0; i < sdN; i++) {
     const LLSaveFile *e = &sdList[i];
     char p[340], tw[100], r[220], when[32];
@@ -992,6 +1056,7 @@ static void handle(void) {
   size_t blen = conn.inLen - conn.hdrEnd;
 
   if (!strcmp(method, "OPTIONS")) { respond(204, "text/plain", NULL, 0, NULL); return; }
+  if (!strcmp(method, "GET") && (!strcmp(target, "/") || !strcmp(target, "/index.html"))) { send_web(); return; }
   if (!strcmp(method, "GET") && !strcmp(target, "/info")) { send_info(); return; }
   if (!strcmp(method, "GET") && !strcmp(target, "/status")) { send_status(); return; }
   if (!strcmp(method, "GET") && !strcmp(target, "/save")) { send_save(); return; }
@@ -1022,7 +1087,7 @@ static void handle(void) {
     send_status();
     return;
   }
-  if (!strcmp(method, "GET") && !strcmp(target, "/sd")) { char f[4]; send_sd_list(query(q, "fresh", f, sizeof f)); return; }
+  if (!strcmp(method, "GET") && !strcmp(target, "/sd")) { char f[4]; bool full = query(q, "full", f, sizeof f); send_sd_list(query(q, "fresh", f, sizeof f) || full, full); return; }
   if (!strcmp(target, "/sd/file")) {
     char path[200];
     if (!query(q, "path", path, sizeof path) || path[0] != '/') { respond_error(400, "Missing path."); return; }
@@ -1050,7 +1115,7 @@ void ll_net_poll(void) {
     int fd = accept(lsock, (struct sockaddr *)&a, &al);
     if (fd < 0) return;
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
-    conn.fd = fd; conn.inLen = conn.hdrEnd = conn.need = conn.outLen = conn.sent = 0; conn.t = plat_ms(); conn.closing = 0;
+    conn.fd = fd; conn.inLen = conn.hdrEnd = conn.need = conn.outLen = conn.sent = conn.extLen = 0; conn.ext = NULL; conn.t = plat_ms(); conn.closing = 0;
     plat_socket_opened(fd);
     snprintf(conn.ip, sizeof conn.ip, "%s", inet_ntoa(a.sin_addr));
   }
@@ -1065,8 +1130,10 @@ void ll_net_poll(void) {
   }
   if (plat_ms() - conn.t > 20000) { drop(); return; }   // stalled
   if (conn.outLen) {   // sending the response
-    while (conn.sent < conn.outLen) {
-      ssize_t k = send(conn.fd, conn.out + conn.sent, conn.outLen - conn.sent > 0x4000 ? 0x4000 : conn.outLen - conn.sent, 0);
+    while (conn.sent < conn.outLen + conn.extLen) {
+      const uint8_t *from = conn.sent < conn.outLen ? conn.out + conn.sent : conn.ext + (conn.sent - conn.outLen);
+      size_t left = conn.sent < conn.outLen ? conn.outLen - conn.sent : conn.outLen + conn.extLen - conn.sent;
+      ssize_t k = send(conn.fd, from, left > 0x4000 ? 0x4000 : left, 0);
       if (k > 0) { conn.sent += (size_t)k; conn.t = plat_ms(); continue; }
       if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
       drop(); return;

@@ -6,9 +6,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef LL_VERSION
-#define LL_VERSION "1.3.2"
-#endif
+// One version for all of Leaflet: version.h is written from js/version.js before every build
+// (tools/build_link_web.py), so Leaflet Link always carries the same number as the Leaflet it shipped with.
+#include "version.h"
 #define LL_PROTOCOL 1
 #define LL_PORT 8226
 #define LL_SAVE_SIZE 0x40000
@@ -141,7 +141,9 @@ bool ll_start_health(char *why, size_t cap);   // read-only check of the save ch
 // Finds Wild World saves on the SD card: Leaflet Link's backups, and the save files of TWiLight Menu++,
 // nds-bootstrap forwarders and other DS homebrew loaders. Newest first.
 int ll_sd_scan(void);                // the whole search at once
-void ll_sd_scan_begin(void);         // or a slice at a time: ll_tick carries it on
+void ll_sd_scan_begin(void);
+void ll_sd_scan_begin_full(bool full);   // full: the whole card, not just the folders where saves were found before
+bool ll_sd_quick(void);                  // the last search looked only in those folders         // or a slice at a time: ll_tick carries it on
 bool ll_sd_scan_step(uint32_t ms);
 bool ll_sd_scanning(void);
 const LLSaveFile *ll_sd_list(int *n);

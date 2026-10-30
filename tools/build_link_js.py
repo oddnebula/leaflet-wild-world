@@ -5,7 +5,7 @@
 import base64, os, re, sys, zlib
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = open(os.path.join(root, 'link', 'LeafletLink.3dsx'), 'rb').read()
-version = re.search(r'#define LL_VERSION "([^"]+)"', open(os.path.join(root, 'link', 'source', 'core.h')).read()).group(1)
+version = re.search(r'#define LL_VERSION "([^"]+)"', open(os.path.join(root, 'link', 'source', 'version.h')).read()).group(1)
 out = os.path.join(root, 'js', 'linkapp.js')
 b64 = base64.b64encode(app).decode()
 with open(out, 'w') as f:

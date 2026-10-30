@@ -50,7 +50,7 @@
       let onMap = null;
       for (let i = 0; i < 4096 && onMap === null; i++) { const id = s.u16(0xC354 + i * 2); const k = STORES.findIndex(x => x[1] === id); if (k >= 0) onMap = k; }
       return [
-        section('On the shelves', '37 slots · right-click to empty'),
+        section('On the shelves', `37 slots · ${UI.rclick} to empty`),
         h('div', { class: 'card pad' }, stock(s, NOOK + 4, 37, NOOK + 0x5C)),
         section('The store'),
         card(

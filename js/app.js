@@ -8,7 +8,11 @@
   const state = { save: null, view: 'welcome', original: null, fileHandle: null };
   window.APP = state;
 
-  const GREETINGS = [
+  const PHONE = !!window.LEAFLET_PHONE;
+  const GREETINGS = PHONE ? [
+    'Hi hi! Open your town’s save, or read it right off your game card, and we’ll take a stroll through it together!',
+    'Ooh, a new day in town! Bring me your save and let’s get to work!',
+  ] : [
     'Hi hi! Drop your town’s save file right here and we’ll take a stroll through it together!',
     'Ooh, a new day in town! Bring me a .sav file and let’s get to work!',
   ];
@@ -274,17 +278,19 @@
       return h('div', { class: 'welcome' }, h('div', { class: 'drop' },
         h('span', { class: 'big-leaf' }, '🍃'),
         h('h2', null, 'Let’s visit your town!'),
-        h('p', null, 'Drop an Animal Crossing: Wild World save (.sav) anywhere on this window, or open one. Your original file is never changed. Saving always writes a new copy.'),
+        h('p', null, PHONE ? 'Open an Animal Crossing: Wild World save (.sav), or read the one on your game card with Cartridge Sync. Your original is never changed. Saving always makes a new copy.'
+          : 'Drop an Animal Crossing: Wild World save (.sav) anywhere on this window, or open one. Your original file is never changed. Saving always writes a new copy.'),
         h('div', { class: 'btn-row', style: { justifyContent: 'center' } },
-          h('button', { class: 'btn leaf', style: { height: '36px', padding: '0 18px', fontSize: '14px' }, onclick: openFile }, '📂  Open Save File')),
+          window.LEAFLET_FROM_LINK ? h('button', { class: 'btn leaf', style: { height: '36px', padding: '0 18px', fontSize: '14px' }, onclick: () => go('sync') }, '🎮  Read My Game Card') : null,
+          h('button', { class: 'btn' + (window.LEAFLET_FROM_LINK ? '' : ' leaf'), style: { height: '36px', padding: '0 18px', fontSize: '14px' }, onclick: openFile }, '📂  Open Save File')),
         h('div', { class: 'rom-card' + (ROM.ready ? ' on' : '') },
           h('b', null, ROM.ready ? '🎨 Game art is on' : '🎮 Want the real game look?'),
-          h('span', null, ROM.ready ? 'Item icons, encyclopedia pictures, 3D models and music come from your ROM.' : 'Optional: open a backup (.nds) you dumped yourself from your own Wild World cartridge to use the game’s item icons, 3D models and music. Leaflet includes no game files, and what it reads stays on this computer. Please don’t download ROMs.'),
+          h('span', null, ROM.ready ? 'Item icons, encyclopedia pictures, 3D models and music come from your ROM.' : 'Optional: open a backup (.nds) you dumped yourself from your own Wild World cartridge to use the game’s item icons, 3D models and music. Leaflet includes no game files, and what it reads stays on this device. Please don’t download ROMs.'),
           ROM.stale ? h('span', { class: 'rom-stale' }, 'This version reads more from the ROM (such as held tools). Open it again to add them.') : null,
           ROM.stale ? h('button', { class: 'btn small', onclick: pickRom }, 'Open ROM again…') : null,
           h('button', { class: 'btn small', onclick: ROM.ready ? () => ROM.forget() : pickRom }, ROM.ready ? 'Forget game art' : 'Open ROM…')),
         (() => { const slot = h('div'); if (window.Backups) Backups.draftNotice().then(c => { if (c) slot.replaceWith(c); }); return slot; })(),
-        h('div', { class: 'fine' }, 'Works with USA and European saves (256 KB) from flashcarts, DeSmuME, melonDS and save dumpers.', h('br'), 'Shortcuts: ', h('span', { class: 'kbd' }, UI.mod + 'O'), ' open · ', h('span', { class: 'kbd' }, UI.mod + 'S'), ' save · ', h('span', { class: 'kbd' }, UI.mod + 'F'), ' search')));
+        h('div', { class: 'fine' }, 'Works with USA and European saves (256 KB) from flashcarts, DeSmuME, melonDS and save dumpers.', PHONE ? null : [h('br'), 'Shortcuts: ', h('span', { class: 'kbd' }, UI.mod + 'O'), ' open · ', h('span', { class: 'kbd' }, UI.mod + 'S'), ' save · ', h('span', { class: 'kbd' }, UI.mod + 'F'), ' search'])));
     },
   });
 

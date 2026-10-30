@@ -383,9 +383,25 @@
     }
   }
 
+  // Words for how things are done here: tap and long-press on phones, click and right-click with a mouse.
+  const PHONE = !!window.LEAFLET_PHONE;
+  const WORDS = { click: PHONE ? 'tap' : 'click', Click: PHONE ? 'Tap' : 'Click', rclick: PHONE ? 'long-press' : 'right-click', here: PHONE ? 'this device' : 'this computer' };
+  // Phones: a long press acts as a right-click (Android sends one; iPhones don't), so every right-click action works.
+  if (PHONE) {
+    let timer = null, start = null;
+    addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) { clearTimeout(timer); return; }
+      const t = e.touches[0], target = e.target; start = [t.clientX, t.clientY];
+      clearTimeout(timer);
+      timer = setTimeout(() => { target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: start[0], clientY: start[1], button: 2 })); start = null; }, 550);
+    }, { passive: true });
+    addEventListener('touchmove', e => { const t = e.touches[0]; if (start && Math.hypot(t.clientX - start[0], t.clientY - start[1]) > 10) clearTimeout(timer); }, { passive: true });
+    addEventListener('touchend', () => clearTimeout(timer), { passive: true });
+    addEventListener('contextmenu', e => { if (!e.isTrusted) return; clearTimeout(timer); }, true);   // Android's own long press: don't send a second
+  }
   window.UI = {
     h, hex, fmt, item, itemEmoji, itemIcon, itemLabel, CATEGORIES, CAT_EMOJI, sfx, tone, setSound, get soundOn() { return soundOn; },
     say, toast, confetti, registry, register, setRegistryView, setRegistryTab, tabOf, setTab, row, guard, card, section,
-    mod: MOD, numberInput, textInput, selectInput, switchInput, seg, stepper, slot, pickItem, confirmSheet, drawPattern,
+    mod: MOD, ...WORDS, numberInput, textInput, selectInput, switchInput, seg, stepper, slot, pickItem, confirmSheet, drawPattern,
   };
 })();

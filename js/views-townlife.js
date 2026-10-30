@@ -129,7 +129,7 @@
     });
     for (const k of stars) { const [x, y] = k.split(',').map(Number); add('circle', { cx: x * C + C / 2, cy: y * C + C / 2, r: 1.4, class: 'sky-star' }); }
     for (const n of cur) for (const [x, y] of D.skyLines[n] || []) add('circle', { cx: x * C + C / 2, cy: y * C + C / 2, r: 3, class: 'sky-star on' });
-    return [h('div', { class: 'card sky-card' }, svg, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px' } }, `${cur.size} of 16 lines · click a line in the sky to add or remove it`)),
+    return [h('div', { class: 'card sky-card' }, svg, h('div', { class: 'muted', style: { fontSize: '11.5px', marginTop: '6px' } }, `${cur.size} of 16 lines · ${UI.click} a line in the sky to add or remove it`)),
       card(
         row('Name', null, textInput(() => s.str(o + 0x16, 16), v => s.setStr(o + 0x16, 16, v), 16, { check: WWSave.canEncode }), o + 0x16),
         row('Made by', `${s.str(o + 0xC, 8) || 'Nobody'} from ${s.str(o + 2, 8) || '?'}`, h('span', { style: { display: 'flex', gap: '6px' } }, textInput(() => s.str(o + 0xC, 8), v => s.setStr(o + 0xC, 8, v), 8, { width: 'w-s', check: WWSave.canEncode }), textInput(() => s.str(o + 2, 8), v => s.setStr(o + 2, 8, v), 8, { width: 'w-s', check: WWSave.canEncode })), o),
