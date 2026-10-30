@@ -103,7 +103,8 @@ design pixels, gyroid sound IDs, villager voice pitch, MelodyPlayer, JP/KR saves
   folders where it found saves, with Look everywhere for a full search.
 - Music is scheduled a little ahead (no stalls), and the Sound Room lists only tracks that play on their own.
 - Still to do before 2.0 ships: test Leaflet Link 2.0.0 on a real 3DS (QR on the lower screen, page load speed, the
-  Sanyo chip), retest Windows (updater, SD scan, app-data copy), and a .cia build with its own updates from GitHub.
+  Sanyo chip), and retest Windows (updater, SD scan, app-data copy). A .cia build was considered and skipped for 2.0;
+  Leaflet Link stays a .3dsx.
 
 ## Fixes from testing on Windows (October 29, 2026)
 - [x] Install melonDS picks the build for the PC's architecture and checks the exe's machine type (it installed the
