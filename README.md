@@ -28,6 +28,14 @@ No other Wild World editor we know of has these:
   code and your turnips**. Every write is checked byte for byte, and the old save is kept first. Leaflet Link also
   **backs up and restores the game card on the 3DS alone**, gives the card a **health check**, and finds
   **TWiLight Menu++** saves on the 3DS's SD card. What you play on the real console joins the Town Diary.
+- 📱 **On your phone, straight from the 3DS.** Scan the QR code Leaflet Link shows and Leaflet opens on your phone or
+  tablet, already connected to your game card. Nothing to install.
+- 🚶 **Walk around your town in 3D**, or see it from above, lit by the game clock and the weather it rolled today.
+- 🌹 **Flower breeding with the game's own hybrid odds**, and the pairs already growing side by side in your town.
+- 🎖️ **Badges and Town vs Town**: badges earned from what each save records, and your towns compared side by side.
+- 🔮 **Tomorrow & Next Week**: what the game has already decided (tomorrow's weather, the week's turnips, visitors).
+- 🔄 **Everything stays up to date together**: the apps update themselves from GitHub, Leaflet updates Leaflet Link on
+  the 3DS, and your settings and backups carry over.
 - ✨ **Editors for things nobody else touches**: Celeste's constellations, the bulletin board, the post office,
   furniture switches and gyroid beats, Mom's letters, villager hobbies, and every one of the game's event flags.
 
@@ -47,7 +55,20 @@ Japanese and Korean saves use a different layout and are not supported.
 
 ![Town overview](docs/screenshots/overview.png)
 
+![Leaflet on a phone, opened from Leaflet Link on the 3DS](docs/screenshots/phones.png)
+
 ![Town card](docs/screenshots/card.png)
+
+### New in 2.0
+
+| | |
+|---|---|
+| ![Leaflet on your phone](docs/screenshots/sync-phone.png) **Leaflet on your phone**: scan the code (or the one on the 3DS) to open Leaflet from Leaflet Link | ![Walk Around Town](docs/screenshots/town3d.png) **Walk Around Town**: your town in 3D, on foot or from above |
+| ![SD card found](docs/screenshots/sd-card.png) **SD cards, found for you**: saves and your ROM, offered as soon as the card goes in | ![Updates](docs/screenshots/updates.png) **Updates and app data**: daily update checks, and your data moves with you |
+| ![Flower Breeding](docs/screenshots/garden.png) **Flower Breeding**: the game's own hybrid odds | ![Badges and Towns](docs/screenshots/badges.png) **Badges & Towns**: badges from each save, towns side by side |
+| ![Tomorrow and Next Week](docs/screenshots/tomorrow.png) **Tomorrow & Next Week**: what the game has already rolled | |
+
+### Everything else
 
 | | |
 |---|---|

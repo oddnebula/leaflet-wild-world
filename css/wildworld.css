@@ -197,7 +197,7 @@ html.tod-night .toolbar { background-image: radial-gradient(1.5px 1.5px at 20% 3
 .hero, :root[data-theme="dark"] .hero { background: linear-gradient(180deg, var(--sky-a, #5fbdff) 0%, var(--sky-b, #c4ecff) 52%, #6cc95f 53%, #4caf4f 100%) !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero { background: linear-gradient(180deg, var(--sky-a, #5fbdff) 0%, var(--sky-b, #c4ecff) 52%, #6cc95f 53%, #4caf4f 100%) !important; } }
 .hero h2 { text-shadow: 0 2px 0 #3a6fa0, 2px 0 0 #3a6fa0, -2px 0 0 #3a6fa0, 0 -2px 0 #3a6fa0, 0 4px 0 #2d5a85; font-weight: 900; }
-.hero p { text-shadow: 0 1px 0 #3a6fa0; font-weight: 800; }
+.hero p { text-shadow: 0 1.5px 0 #3a6fa0, 1.5px 0 0 #3a6fa0, -1.5px 0 0 #3a6fa0, 0 -1.5px 0 #3a6fa0, 0 3px 0 #2d5a85; font-weight: 800; opacity: 1; }   /* outlined like the title, so it reads on a bright daytime sky */
 .sidebar { position: relative; z-index: 3; }
 .ww-particles { z-index: 0; }
 
@@ -734,7 +734,8 @@ canvas.model3d:active { cursor: grabbing; }
 .fl-table td.dim { background: #0000000a; }
 .fl-cell { display: flex; align-items: center; }
 .badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 8px; }
-.badge-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 14px; background: var(--card, #fffdf3); box-shadow: 0 3px 0 #0001; opacity: .62; }
+.badge-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 14px; background: var(--card, #fffdf3); box-shadow: 0 3px 0 #0001; }
+.badge-card:not(.got) > * { opacity: .55; }   /* locked: the card stays solid so the text reads over the pattern */
 .badge-card.got { opacity: 1; box-shadow: 0 3px 0 #e2c57a, inset 0 0 0 2px #f1dc9b; }
 .badge-card .em { font-size: 26px; } .badge-card .muted { font-size: 11.5px; line-height: 1.35; }
 .vs-wrap { overflow-x: auto; }

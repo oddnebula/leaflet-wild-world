@@ -44,5 +44,37 @@
   const gameTime = (s, wall) => new Date(wall + offset(s) * 1000);
   const showGameTime = d => d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-  root.WW_GAMECLOCK = { OFFSET, offset, setOffset, wallNow, parseWall, shift, span, gameTime, showGameTime };
+  // ---------- matching local time ----------
+  // The dates the game measures elapsed time from: the town's last update and the start of next week (TownState),
+  // the turnip week and the day the turnips were bought, the weather's day, and each resident's last-played date
+  // (in the town state and on the resident). Moving the clock moves these by the same number of days, so the game
+  // sees no time pass and none go backwards: turnips keep, weeds don't spread, nobody moves out, and nothing reads as
+  // time travel.
+  const DAY = 86400000;
+  const dmy = o => ({ get: s => { const d = s.u8(o), m = s.u8(o + 1), y = s.u8(o + 2); return m >= 1 && m <= 12 && d >= 1 ? Date.UTC(2000 + y, m - 1, d) : null; },
+    set: (s, t) => { const x = new Date(t); s.set8(o, x.getUTCDate()); s.set8(o + 1, x.getUTCMonth() + 1); s.set8(o + 2, x.getUTCFullYear() - 2000); } });
+  const packed = o => ({ get: s => { const v = s.u16(o), y = v & 0x7F, m = (v >> 7) & 0xF, d = v >> 11; return m >= 1 && m <= 12 && d >= 1 ? Date.UTC(2000 + y, m - 1, d) : null; },
+    set: (s, t) => { const x = new Date(t); s.set16(o, ((x.getUTCFullYear() - 2000) & 0x7F) | ((x.getUTCMonth() + 1) << 7) | (x.getUTCDate() << 11)); } });
+  function trackedDates(s) {
+    const out = [dmy(0x15E54), dmy(0x15E5C), dmy(0x15F4C), dmy(0x15F50), dmy(0x15F66)];
+    for (let p = 0; p < 4; p++) if (s.playerExists(p)) out.push(dmy(0x15EAC + p * 4), packed(s.playerBase(p) + 0x2216));
+    return out;
+  }
+  const dayOf = t => Math.floor(t / DAY);
+  // How far the game's clock is from this device's (seconds; positive = ahead), for a system whose clock reads
+  // systemAhead seconds ahead of this device (0: a DS set to the same time).
+  const fromLocal = (s, systemAhead = 0) => offset(s) + systemAhead;
+  // Sets the game clock to this device's time and moves the tracked dates with it. Returns what changed.
+  function matchLocal(s, systemAhead = 0) {
+    const wall = wallNow(), before = gameTime(s, wall + systemAhead * 1000).getTime(), target = -systemAhead;
+    const seconds = target - offset(s);
+    if (Math.abs(seconds) < 60) return { seconds: 0, days: 0 };
+    const days = dayOf(before + seconds * 1000) - dayOf(before);
+    setOffset(s, target);
+    // Only real dates near the game's own (placeholders such as 1/1/2000 in unused slots stay as they are).
+    if (days) for (const f of trackedDates(s)) { const t = f.get(s); if (t != null && Math.abs(dayOf(t) - dayOf(before)) <= 400) f.set(s, t + days * DAY); }
+    return { seconds, days };
+  }
+
+  root.WW_GAMECLOCK = { OFFSET, offset, setOffset, wallNow, parseWall, shift, span, gameTime, showGameTime, fromLocal, matchLocal };
 })(typeof window !== 'undefined' ? window : this);

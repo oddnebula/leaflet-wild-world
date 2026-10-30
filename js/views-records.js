@@ -172,6 +172,14 @@
         card(
           row('Offset from the DS clock', 'The game’s time is your system clock plus this offset. Changing it is time travel, the same as setting the clock in the game.', clockEditor(s, refresh), CLOCK,
             { risk: 'med', why: 'Jumping ahead lets weeds grow, flowers wilt and villagers move, just like time travel in the game.' }),
+          (() => {
+            // Match my local time: the clock and the dates the game counts from move together (js/gameclock.js).
+            const GCK = window.WW_GAMECLOCK, off = GCK.fromLocal(s);
+            const state = Math.abs(off) < 60 ? 'The game’s clock already matches this device’s time.' : `The game is ${GCK.span(off)} ${off > 0 ? 'ahead of' : 'behind'} this device’s time. This sets it to your local time (for a DS showing the same time as this device) and moves the town’s saved dates with it, so turnips keep and the game doesn’t see any time travel.`;
+            return row('Match my local time', state, h('button', { class: 'btn small leaf', disabled: Math.abs(off) < 60, onclick: () => {
+              const r = GCK.matchLocal(s); sfx.pop(); toast(r.seconds ? `Game clock set to your local time${r.days ? `; saved dates moved ${Math.abs(r.days)} day${Math.abs(r.days) === 1 ? '' : 's'} with it` : ''}` : 'Already on your local time', '🕰️'); refresh();
+            } }, '🕰️ Match my local time'));
+          })(),
           row('Quick changes', 'Shift the game clock from where it is now.', h('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
             [[-1440, '−1 day'], [-60, '−1 hour'], [60, '+1 hour'], [1440, '+1 day'], [10080, '+1 week']].map(([d, label]) => h('button', { class: 'btn small', onclick: () => { s.set32(CLOCK, (s.u32(CLOCK) | 0) + d); sfx.click(); refresh(); } }, label)),
             h('button', { class: 'btn small leaf', onclick: () => { s.set32(CLOCK, 0); s.set16(CLOCK + 4, 0); sfx.pop(); toast('The game now follows the DS clock', '🕰️'); refresh(); } }, 'Use DS time'))),
