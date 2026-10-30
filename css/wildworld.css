@@ -742,3 +742,10 @@ canvas.model3d:active { cursor: grabbing; }
 .vs-table th, .vs-table td { padding: 7px 10px; border-bottom: 1px solid #0001; text-align: left; vertical-align: top; }
 .vs-table td.top { font-weight: 800; color: #2f7a45; }
 .vs-table td.top::after { content: " 👑"; }
+.scr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.scr-list { display: grid; gap: 4px; }
+.scr-line { padding: 8px 4px; border-bottom: 1px dashed #0001; }
+.scr-where { font-size: 12px; margin-bottom: 3px; }
+.scr-text { white-space: pre-wrap; font-size: 13.5px; line-height: 1.45; }
+.scr-text mark { background: #ffe58a; border-radius: 3px; padding: 0 1px; }
+.scr-code { display: inline-block; font-size: 10px; font-weight: 800; padding: 0 5px; margin: 0 2px; border-radius: 99px; background: #e8dfc6; color: #7a6a4a; vertical-align: 1px; }

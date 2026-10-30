@@ -113,3 +113,9 @@ Scanned every call to the flag functions in main and all overlays, including C++
   Bands (func_02049e1c): <75, <80, <95, <101, ≥101. Town rating (func_02049990): perfect when no acre is under 95 and
   at least 8 are 101+.
 - Hybrids: func_020492fc reads data_020da300[kind][lo][hi] → weighted list of flower ids (extracted in js/views-garden.js).
+
+## Game text (2026-10-29)
+- `script/ENG/**.bmg` (1,791 files): `LZ77` + 6 bytes (0xF7, size, 2 more) + an LZ10 stream, then "MESGbmg1" with
+  INF1 (u16 count, u16 entry size, u32 offsets into DAT1) and DAT1 (single-byte text, Latin-1 for accents; 0x1A, length,
+  then a control code for names, colours and pauses). Neighbour lines are split by personality (bo lazy, fu normal,
+  ge peppy, ha jock, ko cranky, ta snooty); special characters are in message/sp/npc.

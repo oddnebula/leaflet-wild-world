@@ -77,12 +77,11 @@ turnip advisor, the Completion score, the letter Game view, the 2D room editor, 
 - [x] Town vs town: every town you've opened side by side, with a crown for whoever leads.
 
 **Chunk C: for hardcore fans**
-- [ ] Game script browser: every line of dialogue and every letter template, read from your ROM's message archives and
-  searchable. Also the way to name the last unnamed flags.
-- [ ] Action Replay codes: turn edits into AR codes for people playing on a real DS without a save dumper.
-- [ ] Town randomizer and challenge saves: random neighbors, fruit, tune and acres, or challenge starts (no tools, no
-  money, one neighbor), always applied to a copy.
-- [ ] Two towns on one computer: two melonDS windows over local wireless so you can visit a friend's town.
+- [x] Game script browser: every line of dialogue and every letter template, read from your ROM's message archives and
+  searchable.
+- [-] Action Replay codes: skipped.
+- [-] Town randomizer and challenge saves: skipped.
+- [-] Two towns on one computer over local wireless: skipped.
 
 **Chunk D: polish and platforms**
 - [ ] Update notice in the app, a notarized Mac app and a Windows installer.

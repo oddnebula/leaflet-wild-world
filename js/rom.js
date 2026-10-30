@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   const DB = 'leaflet-rom', STORE = 'files', KEY = 'ADME';
-  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^bg\/(a[0-8]|ct[0-2])\//, /^str\//, /^fg\/(tree|flower|grass|stone|hole)\//, /^font\/fontA_(head|attr|img)\.bin$/, /^myOrg\//, /^leaflet\/houses\.bin$/];
+  const WANT = [/^menu\/icon\/(icon\d\d\.bch|b_obj_itm\.bpl)$/, /^item_info\/always\.bin$/, /^item_info\/series\.bin$/, /^ftr_info\/(always|dma)\.bin$/, /^ftr\/\d+\/\d+\//, /^(wall|carpet)\//, /^menu\/(fish|bug)_pic\//, /^npc\/model\//, /^cloth\//, /^sound_dataENG\.sdat$/, /^menu\/inventory\//, /^menu\/paper\//, /^P(Body|Head|FcTx|Pal|Gls)\//, /^PItm\/Mdl/, /^fg_data\//, /^bg\/(a[0-8]|ct[0-2])\//, /^str\//, /^fg\/(tree|flower|grass|stone|hole)\//, /^font\/fontA_(head|attr|img)\.bin$/, /^myOrg\//, /^leaflet\/houses\.bin$/, /^script\/ENG\//];
   let files = null;            // Map path -> Uint8Array (raw, possibly compressed)
   let stale = false;           // a cache from an older Leaflet that lacks files this version reads (the start card asks for the ROM again)
   const listeners = new Set();
@@ -31,7 +31,7 @@
 
   function lz10(d) {
     if (!(d[0] === 0x4C && d[1] === 0x5A && d[2] === 0x37 && d[3] === 0x37)) return d;
-    d = d.subarray(4);
+    d = d.subarray(d[4] === 0xF7 ? 10 : 4);   // the message files carry six more bytes (0xF7, size, two more) before the LZ10 stream
     if (d[0] !== 0x10) return d;
     const n = d[1] | (d[2] << 8) | (d[3] << 16), out = new Uint8Array(n);
     let p = 4, o = 0;
@@ -289,8 +289,9 @@
     if (map && map.size) { files = map; stale = WANT.some(re => ![...map.keys()].some(k => re.test(k))); loadSound(); listeners.forEach(f => f()); }
   }
 
+  const list = prefix => (files ? [...files.keys()].filter(k => k.startsWith(prefix)) : []);
   window.ROM = {
-    open, restore, forget, font, builtInDesigns, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
+    open, restore, forget, font, builtInDesigns, list, iconURL, iconIndex, creatureURL, screenURL, paperURL, roomLayout, file, lz10, palette, drawTiles,
     get ready() { return !!files; },
     get stale() { return stale; },
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },
