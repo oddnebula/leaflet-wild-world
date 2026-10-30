@@ -198,6 +198,12 @@
   // ---------- chrome wiring ----------
   // The toolbar's shortcut hints, written for a Mac in index.html, say Ctrl elsewhere.
   if (UI.mod !== '⌘') document.querySelectorAll('.tb-btn[title]').forEach(b => { b.title = b.title.replace('⇧⌘', 'Ctrl+Shift+').replace('⌘', 'Ctrl+'); });
+  // Small screens: the sidebar is a drawer behind the ☰ button, closed again by choosing a page, the scrim or Escape.
+  const setNav = open => { document.body.classList.toggle('nav-open', open); $('navScrim').hidden = !open; $('menuBtn').setAttribute('aria-expanded', open); };
+  $('menuBtn').addEventListener('click', () => { sfx.click(); setNav(!document.body.classList.contains('nav-open')); });
+  $('navScrim').addEventListener('click', () => setNav(false));
+  $('nav').addEventListener('click', e => { if (e.target.closest('.nav-item')) setNav(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('nav-open')) setNav(false); });
   $('openBtn').addEventListener('click', () => { sfx.click(); openFile(); });
   $('saveBtn').addEventListener('click', saveFile);
   const soundBtn = $('soundBtn');

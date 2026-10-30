@@ -749,3 +749,22 @@ canvas.model3d:active { cursor: grabbing; }
 .scr-text { white-space: pre-wrap; font-size: 13.5px; line-height: 1.45; }
 .scr-text mark { background: #ffe58a; border-radius: 3px; padding: 0 1px; }
 .scr-code { display: inline-block; font-size: 10px; font-weight: 800; padding: 0 5px; margin: 0 2px; border-radius: 99px; background: #e8dfc6; color: #7a6a4a; vertical-align: 1px; }
+
+/* ---------- phones: rows stack, wide things wrap or scroll inside their card ---------- */
+@media (max-width: 560px) {
+  .row { flex-wrap: wrap; }
+  .row-ctl { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
+  .row-ctl > * { max-width: 100%; }
+  .row .mono { word-break: break-all; }
+  .btn-row { flex-wrap: wrap; }
+  .tune-grid { min-width: 0; grid-template-columns: repeat(16, minmax(14px, 1fr)); gap: 1px; }
+  .ex-table { display: block; overflow-x: auto; }
+  .ps { grid-template-columns: 1fr; }
+  .roof-swatches { flex-wrap: wrap; }
+  .field.w-l, .field.w-m { max-width: 100%; }
+}
+@media (max-width: 560px) {
+  .bitgrid { grid-template-columns: 1fr !important; }
+  .row-ctl span { flex-wrap: wrap; }
+  .row-label .off { display: block; margin-left: 0; }
+}
