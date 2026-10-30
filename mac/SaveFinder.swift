@@ -14,9 +14,10 @@ enum SaveFinder {
     }
 
     /// Searches a few folders deep for files that start like a Wild World save (its region byte, 0x8A USA, 0xC5
-    /// Europe or 0x32 Japan/Korea, at the start of either copy of the town). At most 60 results.
-    static func find(in roots: [URL]) -> [[String: Any]] {
-        var results: [[String: Any]] = [], looked = 0
+    /// Europe or 0x32 Japan/Korea, at the start of either copy of the town), at most 60, and for Wild World ROMs
+    /// (.nds files whose game code starts ADM), at most 8.
+    static func find(in roots: [URL]) -> (saves: [[String: Any]], roms: [URL]) {
+        var results: [[String: Any]] = [], roms: [URL] = [], looked = 0
         let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
         for root in roots {
             guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
@@ -25,6 +26,10 @@ enum SaveFinder {
                 looked += 1
                 if looked > 20000 || results.count >= 60 { break }
                 let ext = url.pathExtension.lowercased()   // .sav1 to .sav9: nds-bootstrap's extra save slots (TWiLight Menu++)
+                if ext == "nds" {
+                    if roms.count < 8, let size = (try? url.resourceValues(forKeys: keys))?.fileSize, size >= 0x800000, size <= 0x4000000, gameCode(url).hasPrefix("ADM") { roms.append(url) }
+                    continue
+                }
                 guard ["sav", "dsv", "bin"].contains(ext) || ext.range(of: #"^sav[1-9]$"#, options: .regularExpression) != nil,
                       let v = try? url.resourceValues(forKeys: keys), v.isRegularFile == true,
                       let size = v.fileSize, size >= 0x40000, size <= 0x100000,
@@ -34,6 +39,14 @@ enum SaveFinder {
                                 "modified": (v.contentModificationDate ?? Date()).timeIntervalSince1970 * 1000, "data": data.base64EncodedString()])
             }
         }
-        return results
+        return (results, roms)
+    }
+
+    /// The 4-letter game code in a DS ROM header (offset 0x0C), e.g. "ADME".
+    static func gameCode(_ url: URL) -> String {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return "" }
+        defer { try? h.close() }
+        let d = h.readData(ofLength: 16)
+        return d.count == 16 ? String(decoding: d.subdata(in: 12..<16), as: UTF8.self) : ""
     }
 }

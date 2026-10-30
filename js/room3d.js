@@ -9,7 +9,7 @@
   const M3 = () => window.Model3D;
   const u16 = (b, o) => b[o] | (b[o + 1] << 8);
   const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
-  const TILE = 2, WALL_H = 5;
+  const TILE = 2, WALL_H = 8;   // the game's room models: walls 8 units high
   // Footprint tiles per shape (ftr_info/always.bin byte 5) and direction (sFtrFootprintTables).
   const FOOT = [
     [[[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]],
@@ -70,11 +70,12 @@
     const x0 = area.x * TILE, z0 = area.y * TILE, x1 = (area.x + area.w) * TILE, z1 = (area.y + area.h) * TILE;
     const fl = floor >= 0x1144 && floor <= 0x1187 ? decor(`carpet/floor_${floor - 0x1144}.nsbtx`, 'floor') : null;
     const wl = wall >= 0x1100 && wall <= 0x1143 ? decor(`wall/wall_${wall - 0x1100}.nsbtx`, 'wall') : null;
-    const fw = area.w / 2, fh = area.h / 2, ww = area.w;
-    groups.push(quad([[x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0]], fl, fw, fh, 1));
-    groups.push(quad([[x0, 0, z0], [x1, 0, z0], [x1, WALL_H, z0], [x0, WALL_H, z0]], wl, ww, 1, 0.95));
-    groups.push(quad([[x0, 0, z1], [x0, 0, z0], [x0, WALL_H, z0], [x0, WALL_H, z1]], wl, area.h, 1, 0.8));
-    groups.push(quad([[x1, 0, z0], [x1, 0, z1], [x1, WALL_H, z1], [x1, WALL_H, z0]], wl, area.h, 1, 0.8));
+    // As the game's room models map them (bg/a256 myroom): the flooring is stretched to repeat exactly twice across the
+    // floor whatever the room's size, and the wallpaper runs floor to ceiling once, repeating every two spots along.
+    groups.push(quad([[x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0]], fl, 2, 2, 1));
+    groups.push(quad([[x0, 0, z0], [x1, 0, z0], [x1, WALL_H, z0], [x0, WALL_H, z0]], wl, area.w / 2, 1, 0.95));
+    groups.push(quad([[x0, 0, z1], [x0, 0, z0], [x0, WALL_H, z0], [x0, WALL_H, z1]], wl, area.h / 2, 1, 0.8));
+    groups.push(quad([[x1, 0, z0], [x1, 0, z1], [x1, WALL_H, z1], [x1, WALL_H, z0]], wl, area.h / 2, 1, 0.8));
     // Floor layer first, remembering which piece covers each tile so top items know how high to sit.
     const under = new Map();
     for (const layer of [0, 1]) {
@@ -107,5 +108,5 @@
     const d = ROM.file('ftr_info/dma.bin'); if (!d) return 1;
     return d[Math.min((id - 0x3000) >> 2, 0x6E8) * 0x1C + 3] / 16;
   }
-  window.Room3D = { scene, piece, footprint, height, TILE, narcFind };
+  window.Room3D = { scene, piece, footprint, height, TILE, WALL_H, narcFind };
 })();

@@ -72,6 +72,14 @@
   const update = rec => tx('readwrite', st => st.put(rec)).then(() => listeners.forEach(f => f()));
   const clearDrafts = async key => { const d = (await all()).filter(r => r.kind === 'draft' && (!key || r.key === key)); if (d.length) await tx('readwrite', st => d.forEach(r => st.delete(r.id))); listeners.forEach(f => f()); };
   const listeners = new Set();
+  // Records from an app-data file (another computer, or the copy kept before an update), skipping ones already here.
+  async function importRecords(recs) {
+    const have = new Set((await all()).map(r => `${r.key}|${r.hash}|${r.when}`));
+    const fresh = recs.filter(r => r && r.bytes && !have.has(`${r.key}|${r.hash}|${r.when}`)).map(({ id, ...r }) => r);
+    if (fresh.length) await tx('readwrite', st => fresh.forEach(r => st.add(r)));
+    listeners.forEach(f => f());
+    return fresh.length;
+  }
 
   const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
   const pad = n => String(n).padStart(2, '0');
@@ -214,6 +222,7 @@
           s ? row('Back up now', `Keeps the town that’s open (${s.str(4, 8)}), including unsaved edits, and stars it.`, h('button', { class: 'btn small leaf', onclick: async () => { const r = await add(s.export(), 'manual', { file: s.fileName }); if (r) { r.pinned = true; await update(r); } sfx.bell(); toast('Backed up and starred', '📌'); refreshList(refresh); } }, 'Back up')) : null),
         towns.size ? null : h('div', { class: 'card' }, h('div', { class: 'empty-note' }, h('span', { class: 'em' }, '🗂️'), 'No backups yet. Open a save and Leaflet starts keeping them.')),
         ...(compareCard(towns, refresh) || []),
+        ...(window.AppData ? AppData.cards(refresh) : []),
         ...[...towns.entries()].map(([key, list]) => [
           section(`🏡 ${list[0].town}`, `${list.length} version${list.length === 1 ? '' : 's'} · newest ${when(list[0].when)}`),
           h('div', { class: 'card bk-list' }, list.map(r => rowFor(r, refresh, current))),
@@ -234,5 +243,5 @@
   }
 
   startDrafts();
-  window.Backups = { add, opened, saved, fileChanged, startWatch, draftNotice, all, hash, settings, watching, onChange: f => listeners.add(f) };
+  window.Backups = { add, importRecords, opened, saved, fileChanged, startWatch, draftNotice, all, hash, settings, watching, onChange: f => listeners.add(f) };
 })();

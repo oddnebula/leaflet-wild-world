@@ -127,7 +127,7 @@
     const moveSel = to => { if (!sel || (to[0] === sel[0] && to[1] === sel[1])) return; const ok = movePiece(s, r, area, sel, to); if (ok) sel = to; commit(ok); };
     const cv = window.Model3D.viewer(sc.groups.concat(marks()), {
       size: Math.min(620, Math.max(320, (document.getElementById('content')?.clientWidth || 700) - 80)), spin: false, zoom: 1.55, view: view3,
-      frame: { min: [area.x * TILE, 0, area.y * TILE], max: [(area.x + area.w) * TILE, 5, (area.y + area.h) * TILE] },
+      frame: { min: [area.x * TILE, 0, area.y * TILE], max: [(area.x + area.w) * TILE, window.Room3D.WALL_H, (area.y + area.h) * TILE] },
       grab: e => {
         cv.focus();
         const k = hit(e); if (!k || !k.owner) return null;

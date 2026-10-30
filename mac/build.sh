@@ -16,7 +16,7 @@ mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/web"
 cp mac/Leaflet.swift "$TMP/main.swift"
 for arch in arm64 x86_64; do
   swiftc -O -target "$arch-apple-macos13.0" -framework AppKit -framework WebKit \
-    -o "$TMP/Leaflet-$arch" "$TMP/main.swift" mac/LinkInstaller.swift mac/EmulatorSession.swift mac/MelonInstaller.swift mac/SaveFinder.swift
+    -o "$TMP/Leaflet-$arch" "$TMP/main.swift" mac/LinkInstaller.swift mac/EmulatorSession.swift mac/MelonInstaller.swift mac/SaveFinder.swift mac/Updater.swift
 done
 lipo -create "$TMP/Leaflet-arm64" "$TMP/Leaflet-x86_64" -output "$OUT/Contents/MacOS/Leaflet"
 
@@ -33,7 +33,9 @@ ditto --noextattr licenses "$OUT/Contents/Resources/licenses"
 swift mac/icon.swift "$TMP/Leaflet.iconset"
 iconutil -c icns "$TMP/Leaflet.iconset" -o "$OUT/Contents/Resources/Leaflet.icns"
 
-cat > "$OUT/Contents/Info.plist" <<'PLIST'
+# The version comes from js/version.js.
+VERSION=$(sed -n "s/.*LEAFLET_VERSION = '\([0-9.]*\)'.*/\1/p" js/version.js)
+cat > "$OUT/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -41,8 +43,8 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>Leaflet</string>
   <key>CFBundleDisplayName</key><string>Leaflet</string>
   <key>CFBundleIdentifier</key><string>app.leaflet.wildworld-editor</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>Leaflet</string>
   <key>CFBundleIconFile</key><string>Leaflet</string>
   <key>CFBundlePackageType</key><string>APPL</string>

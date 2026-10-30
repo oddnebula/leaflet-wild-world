@@ -237,7 +237,7 @@
           row('Early morning guest', 'Pelly stops by before work (6:00–6:55).', switchInput(rMorning, v => setRMorning(v ? 1 : 0)), ROOST),
           row('Lunchtime guest', '12:00–13:30.', selectInput(ROOST_DAY, rNoon, setRNoon), ROOST),
           row('Afternoon guest', '14:30–16:00.', selectInput(ROOST_DAY, rAfter, setRAfter), ROOST),
-          row('Late-night guest', 'Weekday nights 23:00–midnight, when the weather fits.', switchInput(rLate, v => setRLate(v ? 1 : 0)), ROOST),
+          row('Late-night guest', 'Someone drops in for coffee late at night. The game always rolls one on weekends; on weekdays there’s a 30% chance, and only once Nook’s has become Nookington’s. (You can’t work at the Roost in Wild World; these are guests.)', switchInput(rLate, v => setRLate(v ? 1 : 0)), ROOST),
           row('Also', 'Phyllis drops in most nights 21:00–21:55, and K.K. Slider plays every Saturday from 20:00.', h('span', { class: 'muted' }, '🎸')),
         ),
 

@@ -406,7 +406,9 @@
         !F.results ? h('p', { class: 'muted', style: { margin: '0 0 10px' } }, native ? `Put your flashcart’s microSD card in ${HERE}. Leaflet looks through every SD card and drive you plug in for Wild World saves, so you can open them, back them up or put them on your game card.` : 'Flashcarts such as the R4 keep each game’s save next to it on the microSD card. Choose the card (or a folder on it) and Leaflet finds every Wild World save there.') : null,
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn' + (F.results ? ' small' : ' leaf'), disabled: F.busy, onclick: () => searchSD(false) }, F.busy ? 'Looking…' : native ? (F.results ? 'Look again' : '🔎 Look on SD cards') : '🔎 Choose the SD card…'),
-          native ? h('button', { class: 'btn small', disabled: F.busy, onclick: () => searchSD(true) }, 'Choose a folder…') : null)))];
+          native ? h('button', { class: 'btn small', disabled: F.busy, onclick: () => searchSD(true) }, 'Choose a folder…') : null),
+        native && window.Drives ? h('label', { class: 'muted', style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', fontSize: '12.5px' } },
+          h('input', { type: 'checkbox', checked: Drives.enabled, onchange: e => { Drives.setEnabled(e.target.checked); sfx.click(); } }), 'Look through SD cards by itself when they’re put in (saves and your ROM)') : null))];
   }
 
   // ---------- the 3DS's own SD card (Leaflet Link 1.3) ----------
@@ -848,7 +850,11 @@
           tile('📖', 'Open in Leaflet', 'Edit the town on the card. Save to a file as usual.', openInLeaflet, !c.save),
           native ? tile('🎮', 'Play on melonDS', 'Starts melonDS with this town and brings it back to the card when you’re done.', playOnEmu, !c.save || E.phase === 'playing' || E.phase === 'starting' || (E.phase === 'back' && E.session)) : null,
           tile('💾', 'Save for an emulator', 'A .sav for melonDS, DeSmuME or another emulator.', forEmulator, !c.save),
-          tile('📤', 'Send to the game card', 'Put a town from Leaflet or an emulator back on the card.', () => startReview(), !S.info.card.writable))),
+          tile('📤', 'Send to the game card', 'Put a town from Leaflet or an emulator back on the card.', () => startReview(), !S.info.card.writable)),
+        // Why sending is off. The Sanyo chip (62 16 00) in some Wild World cards needs Leaflet Link 1.3.2 or newer.
+        !S.info.card.writable ? h('div', { class: 'sync-msg bad', style: { marginTop: '10px' } }, '⚠️ ',
+          S.info.card.chipId === '621600' && newer('1.3.2', S.info.version) ? `Sending is off because Leaflet Link ${S.info.version} doesn’t know this card’s save chip. Update Leaflet Link (above) to 1.3.2 or newer and sending works.`
+            : S.info.card.why || 'This card can’t be written right now.') : null),
     ];
   }
 

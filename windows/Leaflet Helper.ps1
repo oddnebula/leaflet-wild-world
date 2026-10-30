@@ -5,8 +5,12 @@
 #   Install melonDS        the latest Windows build from melonDS's GitHub releases, checked against GitHub's SHA-256,
 #                          into %LOCALAPPDATA%\Programs\melonDS (no administrator needed; its settings are kept)
 #   melonDS's Wi-Fi ID     wfcsettings.bin next to melonDS.exe, so a town keeps its friend code
-#   Saves on SD cards      looks through removable drives for Wild World saves
+#   Saves on SD cards      looks through removable drives for Wild World saves (and Wild World ROMs), by itself
+#                          whenever an SD card is put in
 #   Install Leaflet Link   sends it to the Homebrew Launcher over Wi-Fi (like devkitPro's 3dslink)
+#   Update Leaflet         the newest Leaflet-Windows.zip from Leaflet's GitHub releases, checked against GitHub's
+#                          SHA-256, put in place of this copy, and started again (settings and backups live in the
+#                          Edge profile in %LOCALAPPDATA%\Leaflet, so they carry over; appdata.json there is a second copy)
 # The page talks to it at http://127.0.0.1:<port>/ with a random token it gets in its address; anything else is refused.
 # It closes by itself a minute after the Leaflet window is gone (or, while melonDS plays, after melonDS closes).
 # Works in Windows PowerShell 5.1 and PowerShell 7. ASCII only, so 5.1 reads it correctly.
@@ -335,11 +339,57 @@ function StepDownload {
   }
 }
 
+# ---------- updating Leaflet ----------
+# This copy is <folder>\Start Leaflet.cmd and <folder>\app\. The new app folder is unpacked beside it as app.new, then
+# the two are swapped; if Windows won't rename the old one (a file still open), the new files are copied over it.
+$script:restartAt = $null
+function UpdateLeaflet {
+  $root = Split-Path -Parent $here
+  if (-not (Test-Path -LiteralPath (Join-Path $root 'Start Leaflet.cmd'))) { Emit 'LeafletUpdate' @{ state = 'error'; error = 'This copy of Leaflet isn''t laid out like the download, so it can''t update itself. Download the new version from GitHub.' }; return }
+  Emit 'LeafletUpdate' @{ state = 'downloading'; pct = 0 }
+  $tmp = Join-Path $env:TEMP ("leaflet-update-" + [Guid]::NewGuid().ToString('N'))
+  try {
+    try { $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/oddnebula/leaflet-wild-world/releases/latest' -Headers @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'Leaflet' } -TimeoutSec 30 }
+    catch { throw 'Leaflet couldn''t reach GitHub. Check the internet connection.' }
+    $asset = @($release.assets | Where-Object { $_.name -eq 'Leaflet-Windows.zip' }) | Select-Object -First 1
+    if (-not $asset) { throw 'The newest release has no Windows download.' }
+    if (-not $asset.digest -or -not ([string]$asset.digest).StartsWith('sha256:')) { throw 'GitHub didn''t give a checksum for the download, so Leaflet won''t install it. Download it from GitHub instead.' }
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $zip = Join-Path $tmp 'Leaflet-Windows.zip'
+    $c = New-Object Net.WebClient; $c.Headers.Add('User-Agent', 'Leaflet'); $c.DownloadFile([string]$asset.browser_download_url, $zip)
+    if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower() -ne ([string]$asset.digest).Substring(7).ToLower()) { throw 'The download didn''t match the checksum GitHub published, so it wasn''t installed. Try again later.' }
+    Emit 'LeafletUpdate' @{ state = 'installing' }
+    $out = Join-Path $tmp 'out'
+    [IO.Compression.ZipFile]::ExtractToDirectory($zip, $out)
+    $new = Join-Path $out 'Leaflet-Windows'
+    if (-not (Test-Path -LiteralPath (Join-Path $new 'app\index.html')) -or -not (Test-Path -LiteralPath (Join-Path $new 'app\Leaflet Helper.ps1'))) { throw 'The download didn''t contain Leaflet.' }
+    $appNew = Join-Path $root 'app.new'; $appOld = Join-Path $root 'app.old'
+    Remove-Item -LiteralPath $appNew, $appOld -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath (Join-Path $new 'app') -Destination $appNew -Recurse -Force
+    $swapped = $false
+    try { Rename-Item -LiteralPath $here -NewName 'app.old'; Rename-Item -LiteralPath $appNew -NewName 'app'; $swapped = $true } catch { }
+    if (-not $swapped) {
+      if (-not (Test-Path -LiteralPath $here) -and (Test-Path -LiteralPath $appOld)) { Rename-Item -LiteralPath $appOld -NewName 'app' }
+      Copy-Item -Path (Join-Path $appNew '*') -Destination $here -Recurse -Force
+      Remove-Item -LiteralPath $appNew -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Get-ChildItem -LiteralPath $new | Where-Object { $_.Name -ne 'app' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $root -Recurse -Force }
+    Remove-Item -LiteralPath $appOld -Recurse -Force -ErrorAction SilentlyContinue
+    Emit 'LeafletUpdate' @{ state = 'done'; version = ([string]$release.tag_name).TrimStart('v') }
+    $script:restartAt = (Get-Date).AddSeconds(3)   # time for the window to hear it, then the new copy starts
+  } catch {
+    Emit 'LeafletUpdate' @{ state = 'error'; error = "$($_.Exception.Message)" }
+  } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 # ---------- Wild World saves on SD cards and other drives ----------
 # Files that start like a Wild World save (its region byte, 0x8A USA, 0xC5 Europe or 0x32 Japan/Korea, at the start
-# of either copy of the town), a few folders deep. At most 60.
-function FindSaves($roots) {
+# of either copy of the town), a few folders deep. At most 60. Also Wild World ROMs (.nds with a game code starting ADM),
+# which the page can then read through /rom; only files found this way can be read.
+$script:roms = @{}
+function FindSaves($roots, [string]$fn = 'LeafletSaves') {
   $results = New-Object System.Collections.ArrayList
+  $romList = New-Object System.Collections.ArrayList
   $looked = 0
   foreach ($root in $roots) {
     $queue = New-Object System.Collections.Queue
@@ -352,6 +402,16 @@ function FindSaves($roots) {
         $name = [IO.Path]::GetFileName($e)
         if ($name.StartsWith('.')) { continue }
         if ([IO.Directory]::Exists($e)) { if ($depth -lt 6 -and $name -ne 'System Volume Information' -and $name -ne 'Nintendo 3DS') { $queue.Enqueue(@($e, $depth + 1)) }; continue }
+        if ($name -match '\.nds$' -and $romList.Count -lt 8) {
+          try {
+            $fi = New-Object IO.FileInfo $e
+            if ($fi.Length -ge 0x800000 -and $fi.Length -le 0x4000000 -and (GameCode $e).StartsWith('ADM')) {
+              $id = $script:roms.Count + 1; $script:roms[[string]$id] = $e
+              [void]$romList.Add(@{ id = $id; path = $e; name = $name; code = (GameCode $e); size = $fi.Length })
+            }
+          } catch { }
+          continue
+        }
         if ($name -notmatch '\.(sav|dsv|bin|sav[1-9])$') { continue }
         try {
           $fi = New-Object IO.FileInfo $e
@@ -365,7 +425,17 @@ function FindSaves($roots) {
     }
   }
   $searched = @($roots | ForEach-Object { $_.TrimEnd('\') })
-  Emit 'LeafletSaves' @{ results = $results.ToArray(); searched = $searched }
+  Emit $fn @{ results = $results.ToArray(); roms = $romList.ToArray(); searched = $searched }
+}
+# SD cards put in while Leaflet is open (and ones already in when it starts) are looked through by themselves.
+$script:knownDrives = $null; $script:driveCheck = [DateTime]::MinValue
+function StepDrives {
+  if (((Get-Date) - $script:driveCheck).TotalSeconds -lt 3) { return }
+  $script:driveCheck = Get-Date
+  $now = @(RemovableDrives)
+  $new = @($now | Where-Object { $null -eq $script:knownDrives -or $script:knownDrives -notcontains $_ })
+  $script:knownDrives = $now
+  foreach ($d in $new) { try { FindSaves @($d) 'LeafletDrive' } catch { Log "drive: $($_.Exception.Message)" } }
 }
 function RemovableDrives { return @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Removable' -and $_.IsReady } | ForEach-Object { $_.RootDirectory.FullName }) }
 
@@ -497,6 +567,7 @@ function Command($m) {
       'findSaves' { $script:later = @{ kind = 'find'; roots = (RemovableDrives) } }
       'findSavesIn' { $f = ChooseFolder 'Choose an SD card or folder to search for Wild World saves'; if ($f) { $script:later = @{ kind = 'find'; roots = @($f) } } else { Emit 'LeafletSaves' @{ results = @(); searched = @() } } }
       'findLink' { $script:later = @{ kind = 'findLink' } }
+      'update' { $script:later = @{ kind = 'update' } }
       'install3ds' { $script:later = @{ kind = 'install'; app = [Convert]::FromBase64String([string]$m.data); address = ([string]$m.address).Trim() } }
       default { }
     }
@@ -516,6 +587,12 @@ function Reply($stream, [int]$code, [string]$body) {
   $hb = [Text.Encoding]::ASCII.GetBytes($h)
   $stream.Write($hb, 0, $hb.Length); if ($b.Length) { $stream.Write($b, 0, $b.Length) }
 }
+function ReplyBytes($stream, [byte[]]$b) {
+  $h = "HTTP/1.1 200 OK`r`nContent-Type: application/octet-stream`r`nContent-Length: $($b.Length)`r`nCache-Control: no-store`r`n" +
+       "Access-Control-Allow-Origin: *`r`nAccess-Control-Allow-Private-Network: true`r`nConnection: close`r`n`r`n"
+  $hb = [Text.Encoding]::ASCII.GetBytes($h)
+  $stream.Write($hb, 0, $hb.Length); $stream.Write($b, 0, $b.Length)
+}
 function TakeEvents { $list = $events.ToArray(); $events.Clear(); return (Json @($list)) }
 
 function Serve($client) {
@@ -533,7 +610,7 @@ function Serve($client) {
         if ($hdrEnd -lt 0) { if ($len -gt 65536) { return }; continue }
         $head = [Text.Encoding]::ASCII.GetString($all, 0, $hdrEnd)
         if ($head -match '(?im)^content-length:\s*(\d+)') { $need = [int]$Matches[1] }
-        if ($need -gt 16MB) { return }
+        if ($need -gt 160MB) { return }   # an app-data file with many backups can be large
       }
       if ($len - $hdrEnd -ge $need) { break }
     }
@@ -550,6 +627,18 @@ function Serve($client) {
     switch ($path) {
       '/ping' { Reply $stream 200 '{"app":"Leaflet Helper","version":1}' }
       '/events' { Reply $stream 200 (TakeEvents) }
+      '/appdata' {
+        $f = Join-Path $data 'appdata.json'
+        if ($method -eq 'POST') { $fs = [IO.File]::Create($f + '.tmp'); try { $fs.Write($buf.GetBuffer(), $hdrEnd, $need) } finally { $fs.Close() }; Move-Item -LiteralPath ($f + '.tmp') -Destination $f -Force; Reply $stream 200 '{}' }
+        elseif (Test-Path -LiteralPath $f) { ReplyBytes $stream ([IO.File]::ReadAllBytes($f)) }
+        else { Reply $stream 404 '{"error":"No app data kept."}' }
+      }
+      '/rom' {
+        $id = ''; if ($query -match '(^|&)id=(\d+)') { $id = $Matches[2] }
+        $f = $script:roms[$id]
+        if (-not $f -or -not (Test-Path -LiteralPath $f)) { Reply $stream 404 '{"error":"No such ROM."}'; return }
+        ReplyBytes $stream ([IO.File]::ReadAllBytes($f))
+      }
       '/cmd' {
         $body = [Text.Encoding]::UTF8.GetString($buf.GetBuffer(), $hdrEnd, $need)
         $m = $body | ConvertFrom-Json
@@ -607,11 +696,13 @@ try {
     if ($listener.Pending()) { Serve $listener.AcceptTcpClient() } else { Start-Sleep -Milliseconds 25 }
     if ($script:later) {
       $job = $script:later; $script:later = $null
-      try { if ($job.kind -eq 'find') { FindSaves @($job.roots) } elseif ($job.kind -eq 'findLink') { FindLink 3 } else { Install3DS $job.app $job.address } } catch { Log "later: $($_.Exception.Message)" }
+      try { if ($job.kind -eq 'find') { FindSaves @($job.roots) } elseif ($job.kind -eq 'findLink') { FindLink 3 } elseif ($job.kind -eq 'update') { UpdateLeaflet } else { Install3DS $job.app $job.address } } catch { Log "later: $($_.Exception.Message)" }
       $script:lastRequest = Get-Date   # however long the search took, the window gets a minute to collect the answer
     }
     StepDownload
     StepEmulator
+    StepDrives
+    if ($script:restartAt -and (Get-Date) -gt $script:restartAt) { break }
     # The Leaflet window polls every second; a minute without it (and nothing under way) means it's closed.
     if (((Get-Date) - $script:lastRequest).TotalSeconds -gt 60 -and -not $script:proc -and -not $script:dl -and ($events.Count -eq 0 -or ((Get-Date) - $script:lastRequest).TotalSeconds -gt 300)) { break }   # undelivered news waits up to five minutes
   }
@@ -620,3 +711,5 @@ try {
   Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
   Log 'closed'
 }
+# After an update: the new copy starts (and opens its window) once this one has let go of its port.
+if ($script:restartAt) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', ('"' + (Join-Path (Split-Path -Parent $here) 'Start Leaflet.cmd') + '"') -WindowStyle Hidden }

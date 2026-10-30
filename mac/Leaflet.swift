@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // Cartridge Sync's "Play on melonDS" (EmulatorSession.swift).
     let emu = EmulatorSession()
     let melonInstaller = MelonInstaller()
+    let updater = Updater()
 
     func applicationDidFinishLaunching(_ note: Notification) {
         emu.report = { [weak self] info in self?.sendEmu(info) }
@@ -23,7 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
             DispatchQueue.main.async { self?.web.evaluateJavaScript("window.LeafletMelonInstall && LeafletMelonInstall(\(s))") }
         }
+        updater.report = { [weak self] info in
+            guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+            DispatchQueue.main.async { self?.web.evaluateJavaScript("window.LeafletUpdate && LeafletUpdate(\(s))") }
+        }
         buildMenu()
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(volumeMounted(_:)), name: NSWorkspace.didMountNotification, object: nil)
 
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "leaflet")
@@ -77,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if let url = pendingOpen { pendingOpen = nil; load(url) }
+        if !scannedAtStart { scannedAtStart = true; for v in SaveFinder.removableVolumes() { findSaves(in: [v], as: "LeafletDrive") } }
     }
 
     // MARK: unsaved changes
@@ -136,6 +143,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             do { try emu.play(save: save, start: start, cardCode: body["cardCode"] as? String ?? "", town: body["town"] as? String ?? "Town") }
             catch { sendEmu(["state": "error", "error": "\(error)"]) }
         case "findSaves": findSaves(in: removableVolumes())
+        case "readRom": if let id = body["id"] as? Int { sendRom(id) }
+        case "update": updater.run()
+        // A second copy of the page's storage (updater.js), in ~/Library/Application Support/Leaflet.
+        case "appDataSave":
+            if let text = body["data"] as? String {
+                let dir = appSupportDir()
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try? Data(text.utf8).write(to: dir.appendingPathComponent("appdata.json"), options: .atomic)
+            }
+        case "appDataLoad":
+            let text = (try? String(contentsOf: appSupportDir().appendingPathComponent("appdata.json"), encoding: .utf8)) ?? ""
+            let arg = text.isEmpty ? "null" : (String(data: (try? JSONSerialization.data(withJSONObject: [text], options: [.fragmentsAllowed])) ?? Data("[null]".utf8), encoding: .utf8) ?? "[null]") + "[0]"
+            web.evaluateJavaScript("window.LeafletAppData && LeafletAppData(\(arg))")
         case "findSavesIn":
             let panel = NSOpenPanel()
             panel.message = "Choose an SD card or folder to search for Wild World saves"
@@ -198,14 +218,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 
-    // Cartridge Sync: Wild World saves on SD cards (SaveFinder.swift). Replies go to LeafletSaves({results, searched}).
-    func findSaves(in roots: [URL]) {
+    // Cartridge Sync: Wild World saves on SD cards (SaveFinder.swift). Replies go to LeafletSaves({results, roms, searched}),
+    // or for an SD card that was just put in, LeafletDrive with the same fields. Only ROMs found this way can be read.
+    var foundRoms: [Int: URL] = [:]
+    func findSaves(in roots: [URL], as fn: String = "LeafletSaves") {
         DispatchQueue.global(qos: .userInitiated).async {
-            let info: [String: Any] = ["results": SaveFinder.find(in: roots), "searched": roots.map { $0.lastPathComponent }]
-            guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
-            DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletSaves && LeafletSaves(\(s))") }
+            let found = SaveFinder.find(in: roots)
+            DispatchQueue.main.async {
+                let roms: [[String: Any]] = found.roms.map { url in
+                    let id = self.foundRoms.count + 1; self.foundRoms[id] = url
+                    return ["id": id, "path": url.path, "name": url.lastPathComponent, "code": SaveFinder.gameCode(url)]
+                }
+                let info: [String: Any] = ["results": found.saves, "roms": roms, "searched": roots.map { $0.lastPathComponent }]
+                guard let json = try? JSONSerialization.data(withJSONObject: info), let s = String(data: json, encoding: .utf8) else { return }
+                self.web.evaluateJavaScript("window.\(fn) && \(fn)(\(s))")
+            }
         }
     }
+    // A ROM from that list, to the page in pieces (LeafletRomPart) so no single message is huge.
+    func sendRom(_ id: Int) {
+        guard let url = foundRoms[id] else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let data = try? Data(contentsOf: url) else {
+                DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletRomPart && LeafletRomPart({id: \(id), error: 'The ROM couldn’t be read from the SD card.'})") }
+                return
+            }
+            let piece = 3 * 1024 * 1024, n = (data.count + piece - 1) / piece
+            for i in 0..<n {
+                let part = data.subdata(in: (i * piece)..<min(data.count, (i + 1) * piece)).base64EncodedString()
+                DispatchQueue.main.async { self.web.evaluateJavaScript("window.LeafletRomPart && LeafletRomPart({id: \(id), i: \(i), n: \(n), data: '\(part)'})") }
+            }
+        }
+    }
+    // SD cards put in while Leaflet is open are looked through by themselves (and ones already in, once the page loads).
+    @objc func volumeMounted(_ note: Notification) {
+        guard let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {   // let the card settle first
+            if SaveFinder.removableVolumes().contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) { self.findSaves(in: [url], as: "LeafletDrive") }
+        }
+    }
+    var scannedAtStart = false
     func removableVolumes() -> [URL] { SaveFinder.removableVolumes() }
 
     func sendEmu(_ info: [String: Any]) {
@@ -298,6 +350,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         web.evaluateJavaScript("APP.nativeFileChanged('\(data.base64EncodedString())', '\(n)')")
     }
 
+    func appSupportDir() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Leaflet", isDirectory: true)
+    }
+
     func backupsDir() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Leaflet Backups", isDirectory: true)
     }
@@ -348,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         func mi(_ t: String, _ a: Selector?, _ k: String = "", _ m: NSEvent.ModifierFlags = .command) -> NSMenuItem {
             let i = NSMenuItem(title: t, action: a, keyEquivalent: k); i.keyEquivalentModifierMask = m; return i
         }
-        add("Leaflet", [mi("About Leaflet", #selector(about)), .separator(), mi("Hide Leaflet", #selector(NSApplication.hide(_:)), "h"),
+        add("Leaflet", [mi("About Leaflet", #selector(about)), mi("Check for Updates…", #selector(checkUpdates)), .separator(), mi("Hide Leaflet", #selector(NSApplication.hide(_:)), "h"),
                         mi("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]), .separator(),
                         mi("Quit Leaflet", #selector(NSApplication.terminate(_:)), "q")])
         add("File", [mi("Open Save…", #selector(openPanel), "o"), mi("Save a Copy…", #selector(saveCopy), "s"), .separator(),
@@ -366,6 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func saveCopy() { web.evaluateJavaScript("APP.saveFile()") }
     @objc func findOption() { web.evaluateJavaScript("document.getElementById('globalSearch').focus()") }
     @objc func reload() { web.reload() }
+    @objc func checkUpdates() { web.evaluateJavaScript("window.AppData && AppData.check(true)") }
     @objc func about() {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "Leaflet",

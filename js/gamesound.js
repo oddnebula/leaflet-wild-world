@@ -17,8 +17,8 @@
     return { seq: rec(0), ssar: rec(1), bank: rec(2), swar: rec(3), file };
   }
   function ready() { return !!info; }
-  function load(bytes) { sdat = bytes; info = parse(bytes); }
-  function unload() { stopMusic(); sdat = null; info = null; bankCache.clear(); swarCache.clear(); bufCache.clear(); }
+  function load(bytes) { sdat = bytes; info = parse(bytes); listing = null; }
+  function unload() { stopMusic(); sdat = null; info = null; listing = null; bankCache.clear(); swarCache.clear(); bufCache.clear(); }
 
   // ---------- wave archives ----------
   const IMA_STEP = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767];
@@ -46,9 +46,11 @@
       }
       pcm = Float32Array.from(out); loopStartS = Math.max(0, (loopStart - 1) * 8);
     }
-    const buf = ctx.createBuffer(1, Math.max(1, pcm.length), rate || 22050);
+    // Some browsers refuse low sample rates for a buffer; then the samples go in at 22,050 Hz and play back slower to match.
+    const want = rate || 22050; let buf, at = want;
+    try { buf = ctx.createBuffer(1, Math.max(1, pcm.length), want); } catch (e) { at = 22050; buf = ctx.createBuffer(1, Math.max(1, pcm.length), at); }
     buf.copyToChannel(pcm, 0);
-    const r = { buf, loop: !!loop, loopStart: loopStartS / (rate || 22050) };
+    const r = { buf, loop: !!loop, loopStart: loopStartS / at, speed: want / at };
     bufCache.set(key, r);
     return r;
   }
@@ -92,7 +94,7 @@
       const w = swav(b.swars[d.swar], d.wave); if (!w) return;
       src = ctx.createBufferSource(); src.buffer = w.buf;
       if (w.loop) { src.loop = true; src.loopStart = w.loopStart; src.loopEnd = w.buf.duration; }
-      src.playbackRate.value = Math.pow(2, (key - d.note + tr.transpose + tr.bend) / 12);
+      src.playbackRate.value = w.speed * Math.pow(2, (key - d.note + tr.transpose + tr.bend) / 12);
     } else if (v.type === 2) {
       src = ctx.createOscillator(); src.type = 'square'; src.frequency.value = 440 * Math.pow(2, (key - 69 + tr.transpose + tr.bend) / 12);
     } else if (v.type === 3) {
@@ -119,6 +121,7 @@
   // at its first backward jump (the loop point), so a song plays through once.
   function runSeq(data, start, bk, vol, t0, opt = {}) {
     const maxTicks = opt.maxTicks || 48 * 16, out = opt.out || master;
+    const emit = opt.emit || ((at, dur, key, vel, tr) => playNote(t0 + at, dur, key, vel, vol, tr.pan, bk, tr.prog, tr));
     const tempos = [[0, 120]];
     const secAt = tick => {
       let sec = 0, last = 0, bpm = 120;
@@ -135,7 +138,7 @@
         if (c < 0x80) {
           const vel = data[p++]; let dur; [dur, p] = varlen(data, p);
           const at = secAt(t);
-          playNote(t0 + at, dur ? secAt(t + dur) - at : 0, c, vel, vol, tr.pan, bk, tr.prog, tr);
+          emit(at, dur ? secAt(t + dur) - at : 0, c, vel, tr);
           if (tr.wait) t += dur;
           continue;
         }
@@ -180,7 +183,7 @@
 
   function audio() {
     if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination); }
-    if (ctx.state === 'suspended' && !(window.OfflineAudioContext && ctx instanceof OfflineAudioContext)) ctx.resume();
+    if (ctx.state === 'suspended' && !(window.OfflineAudioContext && ctx instanceof OfflineAudioContext)) ctx.resume().catch(() => { /* waits for a click */ });
   }
   function play(id, opts = {}) {
     if (!info) return false;
@@ -201,7 +204,7 @@
     const saveCtx = ctx, saveMaster = master, saveBufs = new Map(bufCache), saveMusic = music, secs = opt.seconds || 3;
     ctx = new OfflineAudioContext(1, 22050 * secs, 22050); master = ctx.createGain(); master.connect(ctx.destination); bufCache.clear(); music = null;
     let length = null;
-    const ok = opt.music ? (() => { const r = playMusic(id); if (r) { length = +r.seconds.toFixed(1); clearTimeout(music.timer); music = null; } return !!r; })() : play(id);
+    const ok = opt.music ? (() => { const r = playMusic(id); if (r) { length = +r.seconds.toFixed(1); music = null; } return !!r; })() : play(id);
     const out = await ctx.startRendering();
     ctx = saveCtx; master = saveMaster; music = saveMusic; bufCache.clear(); saveBufs.forEach((v, k) => bufCache.set(k, v));
     const d = out.getChannelData(0); let peak = 0, last = 0;
@@ -213,39 +216,70 @@
   let music = null;
   function stopMusic() {
     if (!music) return;
-    const m = music; music = null;
+    const m = music; music = null; clearInterval(m.pump); clearTimeout(m.timer);
     try { m.bus.gain.setTargetAtTime(0, ctx.currentTime, 0.08); setTimeout(() => m.bus.disconnect(), 600); } catch (e) { /* already gone */ }
     if (m.onEnd) m.onEnd();
   }
+  let lastError = '';
+  const snap = tr => ({ prog: tr.prog, pan: tr.pan, vol: tr.vol, expr: tr.expr, transpose: tr.transpose, bend: tr.bend, a: tr.a, d: tr.d, s: tr.s, r: tr.r, out: tr.out });
   function playMusic(seqNo, opts = {}) {
-    if (!info) return null;
+    lastError = '';
+    if (!info) { lastError = 'no sound archive'; return null; }
     stopMusic();
     try {
       audio();
-      const e = info.seq[seqNo]; if (!e) return null;
-      const f = info.file(u16(sdat, e)), bk = bank(u16(sdat, e + 4)); if (!bk || String.fromCharCode(...f.subarray(0, 4)) !== 'SSEQ') return null;
+      const e = info.seq[seqNo]; if (!e) { lastError = 'no such sequence'; return null; }
+      const f = info.file(u16(sdat, e)), bk = bank(u16(sdat, e + 4)), vol = sdat[e + 6] || 100;
+      if (!f || String.fromCharCode(...f.subarray(0, 4)) !== 'SSEQ') { lastError = 'not a sequence'; return null; }
+      if (!bk) { lastError = `bank ${u16(sdat, e + 4)} missing`; return null; }
       const dataOff = u32(f, 0x18), bus = ctx.createGain(); bus.gain.value = opts.volume ?? 0.9; bus.connect(master);
-      const seconds = runSeq(f.subarray(dataOff), 0, bk, sdat[e + 6] || 100, ctx.currentTime + 0.05, { once: true, maxTicks: 48 * 4 * 200, maxOps: 200000, out: bus });
-      const m = { bus, seconds, onEnd: opts.onEnd };
-      m.timer = setTimeout(() => { if (music === m) stopMusic(); }, (seconds + 1.5) * 1000);
-      music = m;
-      return { seconds, stop: () => { if (music === m) { clearTimeout(m.timer); stopMusic(); } } };
-    } catch (err) { return null; }
+      const notes = [];
+      const seconds = runSeq(f.subarray(dataOff), 0, bk, vol, 0, { once: true, maxTicks: 48 * 4 * 200, maxOps: 200000, out: bus, emit: (at, dur, key, vel, tr) => notes.push([at, dur, key, vel, snap(tr)]) });
+      if (!notes.length) { bus.disconnect(); lastError = 'silent'; return null; }
+      notes.sort((x, y) => x[0] - y[0]);
+      const offline = window.OfflineAudioContext && ctx instanceof OfflineAudioContext, t0 = ctx.currentTime + 0.1;
+      const m = { bus, seconds, onEnd: opts.onEnd, k: 0 };
+      // One note that can't be made (a missing sample, say) is skipped rather than stopping the song.
+      const pump = () => {
+        if (music !== m && !offline) return;
+        const until = offline ? Infinity : ctx.currentTime - t0 + 2;
+        while (m.k < notes.length && notes[m.k][0] < until) {
+          const [at, dur, key, vel, tr] = notes[m.k++];
+          try { playNote(t0 + at, dur, key, vel, vol, tr.pan, bk, tr.prog, tr); } catch (err) { lastError = err.message; }
+        }
+        if (!offline && m.k >= notes.length && ctx.currentTime > t0 + seconds + 1.2) stopMusic();
+      };
+      music = m; pump();
+      if (!offline) m.pump = setInterval(pump, 250);
+      return { seconds, stop: () => { if (music === m) stopMusic(); } };
+    } catch (err) { lastError = err.message; return null; }
   }
 
   // What the sound archive holds, for the Sound Room: music sequence numbers, and the effects in each effect archive.
+  // Only ones that play notes on their own: about a hundred sequences (248 on) and some effect slots are driven by
+  // values the game sets while it runs, and stay silent here, so they're left out.
+  let listing = null;
+  const notes = (data, start) => { let n = 0; try { runSeq(data, start, null, 0, 0, { once: true, maxTicks: 48 * 4 * 200, maxOps: 20000, emit: () => n++ }); } catch (e) { /* unreadable */ } return n; };
   function contents() {
     if (!info) return null;
+    if (listing) return listing;
     const music = [], effects = [];
-    info.seq.forEach((e, i) => { if (e) music.push(i); });
+    info.seq.forEach((e, i) => {
+      if (!e) return;
+      try { const f = info.file(u16(sdat, e)); if (String.fromCharCode(...f.subarray(0, 4)) === 'SSEQ' && info.bank[u16(sdat, e + 4)] && notes(f.subarray(u32(f, 0x18)), 0)) music.push(i); } catch (err) { /* skipped */ }
+    });
     info.ssar.forEach((e, arc) => {
       if (!e) return;
-      try { const f = info.file(u16(sdat, e)), n = u32(f, 0x1C); const ids = []; for (let k = 0; k < n; k++) if (u32(f, 0x20 + k * 12) !== 0xFFFFFFFF) ids.push(arc * 1000 + k); if (ids.length) effects.push({ arc, ids }); } catch (err) { /* unreadable archive: skipped */ }
+      try {
+        const f = info.file(u16(sdat, e)), dataOff = u32(f, 0x18), n = u32(f, 0x1C), ids = [];
+        for (let k = 0; k < n; k++) { const start = u32(f, 0x20 + k * 12); if (start !== 0xFFFFFFFF && info.bank[u16(f, 0x20 + k * 12 + 4)] && notes(f.subarray(dataOff), start)) ids.push(arc * 1000 + k); }
+        if (ids.length) effects.push({ arc, ids });
+      } catch (err) { /* unreadable archive: skipped */ }
     });
-    return { music, effects };
+    return (listing = { music, effects });
   }
 
-  window.GameSound = { load, unload, ready, play, playMusic, stopMusic, analyze, contents, get playingMusic() { return !!music; }, get context() { return ctx; } };
+  window.GameSound = { load, unload, ready, play, playMusic, stopMusic, analyze, contents, get playingMusic() { return !!music; }, get context() { return ctx; }, get lastError() { return lastError; } };
 
   // Animalese from the game's voice syllables (SndMgr_GetVoiceSeqIndex: archive 0, sequence = syllable + 207 for the
   // default voice). Syllables follow the kana order, so each consonant + vowel pair picks the matching kana.
